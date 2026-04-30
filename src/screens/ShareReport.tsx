@@ -28,7 +28,7 @@ export const ShareReport: React.FC = () => {
             <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_2px_2px,black_1px,transparent_0)] bg-[size:20px_20px]" />
             <div className="relative z-10 max-w-[85%] bg-white p-4 rounded-2xl rounded-tl-none shadow-sm">
               <div className="space-y-2">
-                <p className="text-sm font-bold text-emerald-800">CHAYE CAFE - Daily Inventory Summary</p>
+                <p className="text-sm font-bold text-emerald-800">SHOP HISAB - Daily Inventory Summary</p>
                 <p className="text-[10px] text-slate-400 border-b border-emerald-50 pb-2">October 24, 2023</p>
                 <div className="grid grid-cols-2 gap-y-2 text-xs font-medium pt-2">
                   <span className="text-slate-400 font-normal">Shop Name</span><span className="text-right text-emerald-950">Urban Boutique</span>

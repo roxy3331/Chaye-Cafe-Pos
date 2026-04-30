@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "StockItem": {
+      "title": "Stock Item",
+      "description": "Represents an item in the shop's inventory.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "batchNumber": { "type": "string" },
+        "averageBuy": { "type": "number" },
+        "currentSell": { "type": "number" },
+        "stock": { "type": "number" },
+        "status": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "category", "stock", "averageBuy", "currentSell"]
+    },
+    "PurchaseRecord": {
+      "title": "Purchase Record",
+      "description": "A record of a purchase from a vendor.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "itemName": { "type": "string" },
+        "quantity": { "type": "number" },
+        "pcsPerPack": { "type": "number" },
+        "totalPcs": { "type": "number" },
+        "buyingPricePerPc": { "type": "number" },
+        "sellingPricePerPc": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "salesmanName": { "type": "string" },
+        "salesmanPhone": { "type": "string" },
+        "orderBookerName": { "type": "string" },
+        "orderBookerPhone": { "type": "string" }
+      },
+      "required": ["itemName", "totalPcs", "buyingPricePerPc", "date"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "A business expense record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "description": { "type": "string" }
+      },
+      "required": ["title", "amount", "category", "date"]
+    },
+    "Vendor": {
+      "title": "Vendor",
+      "description": "A supplier or vendor contact.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "contact": { "type": "string" },
+        "category": { "type": "string" },
+        "balance": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["name", "contact"]
+    }
+  },
+  "firestore": {
+    "/stock/{itemId}": {
+      "schema": "StockItem",
+      "description": "Central inventory collection."
+    },
+    "/purchases/{purchaseId}": {
+      "schema": "PurchaseRecord",
+      "description": "History of buying from vendors."
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Records of daily/monthly business expenses."
+    },
+    "/vendors/{vendorId}": {
+      "schema": "Vendor",
+      "description": "Vendor directory."
+    }
+  }
+}

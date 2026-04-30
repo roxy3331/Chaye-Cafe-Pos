@@ -7,7 +7,7 @@ export const Settings: React.FC = () => {
     <div className="space-y-12 pb-32 animate-in fade-in duration-700">
       <header>
         <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-[0.2em] mb-2">PWA INSTALLATION</p>
-        <h1 className="text-4xl font-bold text-emerald-900">Install CHAYE CAFE IMS</h1>
+        <h1 className="text-4xl font-bold text-emerald-900">Install SHOP HISAB</h1>
         <p className="text-slate-500 mt-2">Get the inventory manager on your phone without app store hassle.</p>
       </header>
 
@@ -17,8 +17,8 @@ export const Settings: React.FC = () => {
           <div className="w-24 h-24 bg-emerald-900 rounded-3xl flex items-center justify-center shadow-2xl text-white mb-6">
             <Package className="w-12 h-12" />
           </div>
-          <h3 className="text-2xl font-bold text-emerald-900">CHAYE CAFE</h3>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Inventory Management System</p>
+          <h3 className="text-2xl font-bold text-emerald-900">SHOP HISAB</h3>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Purchase · Stock · Profit Management</p>
           <button className="mt-8 w-full bg-emerald-900 text-white py-4 rounded-xl font-bold active:scale-95 transition-all">
             Copy App Link
           </button>

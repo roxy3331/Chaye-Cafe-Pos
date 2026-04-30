@@ -1,0 +1,116 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner'
+      );
+    }
+
+    // Validation Blueprint for StockItem
+    function isValidStockItem(data) {
+      return data.keys().hasAll(['name', 'category', 'stock', 'averageBuy', 'currentSell']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.category is string && data.category.size() <= 50 &&
+             data.stock is number && data.stock >= 0 &&
+             data.averageBuy is number && data.averageBuy >= 0 &&
+             data.currentSell is number && data.currentSell >= 0;
+    }
+
+    match /stock/{itemId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(itemId) && isValidStockItem(incoming());
+      allow update: if isSignedIn() && isValidStockItem(incoming());
+      allow delete: if isOwner();
+    }
+
+    // Validation Blueprint for PurchaseRecord
+    function isValidPurchase(data) {
+      return data.keys().hasAll(['itemName', 'totalPcs', 'buyingPricePerPc', 'date', 'type']) &&
+             data.itemName is string && data.itemName.size() <= 100 &&
+             data.totalPcs is number && data.totalPcs >= 0 &&
+             data.buyingPricePerPc is number && data.buyingPricePerPc >= 0;
+    }
+
+    match /purchases/{purchaseId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(purchaseId) && isValidPurchase(incoming());
+      allow update, delete: if isOwner();
+    }
+
+    match /openingStock/{opId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(opId);
+      allow update, delete: if isOwner();
+    }
+
+    // Validation Blueprint for Expense
+    function isValidExpense(data) {
+      return data.keys().hasAll(['title', 'amount', 'category', 'date']) &&
+             data.title is string && data.title.size() <= 200 &&
+             data.amount is number && data.amount > 0;
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(expenseId) && isValidExpense(incoming());
+      allow update, delete: if isOwner();
+    }
+
+    // Validation Blueprint for Vendor
+    function isValidVendor(data) {
+      return data.keys().hasAll(['name', 'contact']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.contact is string && data.contact.size() <= 50;
+    }
+
+    match /vendors/{vendorId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(vendorId) && isValidVendor(incoming());
+      allow update: if isSignedIn() && isValidVendor(incoming());
+      allow delete: if isOwner();
+    }
+
+    // Validation Blueprint for Sale
+    function isValidSale(data) {
+      return data.keys().hasAll(['itemName', 'units', 'profit', 'date']) &&
+             data.itemName is string &&
+             data.units is number &&
+             data.profit is number;
+    }
+
+    match /sales/{saleId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isOwner();
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (userId == request.auth.uid || isOwner());
+      allow create: if isSignedIn() && userId == request.auth.uid && incoming().role in ['owner', 'employee'];
+      allow update: if isOwner() || (isSignedIn() && userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['lastLogin']));
+      allow delete: if isOwner();
+    }
+  }
+}

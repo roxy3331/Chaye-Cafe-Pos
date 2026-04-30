@@ -15,7 +15,7 @@ export const Layout: React.FC<{ children: React.ReactNode; userRole: 'owner' | '
             <Menu className="w-6 h-6" />
           </button>
           <h1 className="text-lg font-bold tracking-[0.1em] text-emerald-900 uppercase">
-            CHAYE CAFE
+            SHOP HISAB
           </h1>
         </div>
         <div className="flex items-center gap-4">
@@ -23,7 +23,7 @@ export const Layout: React.FC<{ children: React.ReactNode; userRole: 'owner' | '
             <span className="text-xs font-bold text-emerald-950 capitalize">{userRole}</span>
             <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none">System Access</span>
           </div>
-          <button className="p-2 rounded-full hover:bg-emerald-50 transition-colors text-emerald-900">
+          <button className="p-2 rounded-full hover:bg-emerald-50 transition-colors text-emerald-900 focus:outline-none">
             <Bell className="w-5 h-5" />
           </button>
           <div className="w-8 h-8 rounded-full bg-emerald-900 flex items-center justify-center border border-emerald-950 shadow-lg">
@@ -35,8 +35,8 @@ export const Layout: React.FC<{ children: React.ReactNode; userRole: 'owner' | '
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-white border-r border-emerald-50 flex-col py-8 px-4 z-50">
         <div className="mb-12 px-4">
-          <h2 className="text-xl font-extrabold text-emerald-900 tracking-tighter">CHAYE CAFE</h2>
-          <p className="text-[10px] text-emerald-600 font-bold tracking-widest uppercase">Inventory Management</p>
+          <h2 className="text-xl font-extrabold text-emerald-900 tracking-tighter">SHOP HISAB</h2>
+          <p className="text-[10px] text-emerald-600 font-bold tracking-widest uppercase">Purchase · Stock · Profit</p>
         </div>
         <nav className="space-y-2">
           <SidebarLink to="/" icon={<LayoutDashboard />} label="Dashboard" />
