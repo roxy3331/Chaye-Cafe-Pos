@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Role check logic - we'll check against a users collection
+    function isOwner() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    // 1. StockItem Validation
+    function isValidStockItem(data) {
+      return data.keys().hasAll(['name', 'category', 'stock', 'averageBuy', 'currentSell']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.category is string && data.category.size() <= 50 &&
+             data.stock is int && data.stock >= 0 &&
+             data.averageBuy is number && data.averageBuy >= 0 &&
+             data.currentSell is number && data.currentSell >= 0;
+    }
+
+    match /stock/{itemId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(itemId) && isValidStockItem(incoming());
+      allow update: if isSignedIn() && isValidStockItem(incoming()) && (
+        // Action: Restock
+        (incoming().diff(existing()).affectedKeys().hasOnly(['stock', 'updatedAt'])) ||
+        // Action: Price Adjustment (Owner Only)
+        (isOwner() && incoming().diff(existing()).affectedKeys().hasOnly(['currentSell', 'averageBuy', 'updatedAt'])) ||
+        // Action: General Update (Owner Only)
+        isOwner()
+      );
+      allow delete: if isOwner();
+    }
+
+    // 2. PurchaseRecord Validation
+    function isValidPurchase(data) {
+      return data.keys().hasAll(['itemName', 'totalPcs', 'buyingPricePerPc', 'date']) &&
+             data.itemName is string && data.itemName.size() <= 100 &&
+             data.totalPcs is int && data.totalPcs > 0 &&
+             data.buyingPricePerPc is number && data.buyingPricePerPc >= 0;
+    }
+
+    match /purchases/{purchaseId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(purchaseId) && isValidPurchase(incoming());
+      allow update, delete: if isOwner();
+    }
+
+    // 3. Expense Validation
+    function isValidExpense(data) {
+      return data.keys().hasAll(['title', 'amount', 'category', 'date']) &&
+             data.title is string && data.title.size() <= 200 &&
+             data.amount is number && data.amount > 0;
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(expenseId) && isValidExpense(incoming());
+      allow update, delete: if isOwner();
+    }
+
+    // 4. Vendor Validation
+    function isValidVendor(data) {
+      return data.keys().hasAll(['name', 'contact']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.contact is string && data.contact.size() <= 50;
+    }
+
+    match /vendors/{vendorId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(vendorId) && isValidVendor(incoming());
+      allow update: if isSignedIn() && isValidVendor(incoming());
+      allow delete: if isOwner();
+    }
+
+    // 5. Users Collection (for roles)
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && userId == request.auth.uid && incoming().role in ['owner', 'employee'];
+      allow update: if isOwner(); // Only owners can change roles
+      allow delete: if isOwner();
+    }
+  }
+}
