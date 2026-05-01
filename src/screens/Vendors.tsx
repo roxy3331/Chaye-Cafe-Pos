@@ -39,16 +39,20 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
     }
   };
 
-  const filteredVendors = (vendors || []).filter(v => 
-    v.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    v.phoneNumber.includes(searchTerm) ||
-    v.salesmanPhone.includes(searchTerm) ||
-    v.orderBookerPhone.includes(searchTerm)
-  );
+  const filteredVendors = (vendors || []).filter(v => {
+    const q = searchTerm.toLowerCase();
+    return (
+      v.name?.toLowerCase().includes(q) ||
+      (v.phoneNumber || '').includes(q) ||
+      (v.salesmanName || '').toLowerCase().includes(q) ||
+      (v.salesmanPhone || '').includes(q) ||
+      (v.orderBookerPhone || '').includes(q)
+    );
+  });
 
   const handleAddVendor = async () => {
-    if (!newVendor.name || !newVendor.phoneNumber) {
-      showToast('Name and Phone are required', 'warning');
+    if (!newVendor.name.trim()) {
+      showToast('Company name required hai', 'warning');
       return;
     }
     setLoading(true);
@@ -226,7 +230,7 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Company Phone</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Company Phone <span className="normal-case text-slate-400 font-normal">(optional)</span></label>
                   <input 
                     type="text" 
                     placeholder="0300-1234567" 
@@ -237,7 +241,7 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Salesman Name</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Salesman Name <span className="normal-case text-slate-400 font-normal">(opt)</span></label>
                     <input 
                       type="text" 
                       placeholder="Name" 
@@ -247,7 +251,7 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Salesman Phone</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Salesman Phone <span className="normal-case text-slate-400 font-normal">(opt)</span></label>
                     <input 
                       type="text" 
                       placeholder="Phone" 
@@ -259,7 +263,7 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Order Booker Name</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Order Booker Name <span className="normal-case text-slate-400 font-normal">(opt)</span></label>
                     <input 
                       type="text" 
                       placeholder="Name" 
@@ -269,7 +273,7 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Order Booker Phone</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Order Booker Phone <span className="normal-case text-slate-400 font-normal">(opt)</span></label>
                     <input 
                       type="text" 
                       placeholder="Phone" 

@@ -62,29 +62,24 @@ export const dataService = {
   // Purchases
   async addPurchase(purchase: any) {
     try {
-      // 1. Add purchase record
       await addDoc(collection(db, 'purchases'), {
         ...purchase,
         type: 'purchase',
         date: serverTimestamp()
       });
 
-      // 2. Update stock (logic to find or create stock item)
       const q = query(collection(db, 'stock'), where('name', '==', purchase.itemName));
       const snap = await getDocs(q);
-      
+
       if (!snap.empty) {
         const stockDoc = snap.docs[0];
         const oldData = stockDoc.data() as any;
-        
-        // Record sale if there was a batch settlements
-        // CRITICAL: Skip profit if the existing stock was categorized as 'opening'
+
         const soldPcs = Math.max(0, (oldData.stock || 0) - (purchase.remainingUnits || 0));
         if (soldPcs > 0 && oldData.type !== 'opening') {
           const unitSize = oldData.pcsPerPack || 1;
           const soldUnits = soldPcs / unitSize;
           const oldAvgBuy = oldData.averageBuy || purchase.buyingPricePerPc;
-          // FIX: use old batch's currentSell for profit — not new purchase's sellingPricePerPc
           const oldSellPrice = oldData.currentSell || purchase.sellingPricePerPc;
 
           await addDoc(collection(db, 'sales'), {
@@ -97,12 +92,11 @@ export const dataService = {
           });
         }
 
-        // Weighted Average Calculation
         const oldQty = purchase.remainingUnits || 0;
         const oldPrice = oldData.averageBuy || purchase.buyingPricePerPc;
         const newQty = purchase.totalPcs;
         const newPrice = purchase.buyingPricePerPc;
-        
+
         const weightedAvg = (oldQty + newQty) === 0
           ? newPrice
           : ((oldQty * oldPrice) + (newQty * newPrice)) / (oldQty + newQty);
@@ -114,7 +108,7 @@ export const dataService = {
           averageBuy: weightedAvg,
           currentSell: purchase.sellingPricePerPc,
           updatedAt: serverTimestamp(),
-          type: 'purchase' // Reset to purchase type
+          type: 'purchase'
         });
       } else {
         await addDoc(collection(db, 'stock'), {
@@ -136,13 +130,11 @@ export const dataService = {
 
   async addOpeningStock(data: any) {
     try {
-      // 1. Add opening record (optional but good for history)
       await addDoc(collection(db, 'openingStock'), {
         ...data,
         addedAt: serverTimestamp()
       });
 
-      // 2. Update stock aggregate
       const q = query(collection(db, 'stock'), where('name', '==', data.itemName));
       const snap = await getDocs(q);
 
@@ -151,7 +143,7 @@ export const dataService = {
         const oldData = stockDoc.data();
         await updateDoc(doc(db, 'stock', stockDoc.id), {
           stock: (oldData.stock || 0) + data.qty,
-          type: 'opening', // Mark as opening so next purchase skips profit
+          type: 'opening',
           updatedAt: serverTimestamp()
         });
       } else {
@@ -204,4 +196,9 @@ export const dataService = {
 
   async addVendor(vendor: any) {
     try {
-      aw
+      await addDoc(collection(db, 'vendors'), vendor);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, 'vendors');
+    }
+  }
+};

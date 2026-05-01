@@ -1,0 +1,96 @@
+{
+  "name": "09 - Price Change Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "price-change",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "trigger",
+      "name": "Price Change Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data = $input.item.json.body || $input.item.json;\nconst itemName   = data.itemName   || 'Unknown Item';\nconst oldPrice   = parseFloat(data.oldPrice   || 0);\nconst newPrice   = parseFloat(data.newPrice   || 0);\nconst changedBy  = data.changedBy  || 'System';\n\nif(newPrice <= oldPrice) return [];  // Only alert when price increases\n\nconst diff    = newPrice - oldPrice;\nconst pct     = oldPrice > 0 ? ((diff/oldPrice)*100).toFixed(1) : 'N/A';\nconst now     = new Date().toLocaleString('ur-PK',{timeZone:'Asia/Karachi'});\n\nconst msg = `💹 <b>CHAYE CAFE — Price Change Alert!</b>\n\n🕐 Time: ${now}\n📦 Item: <b>${itemName}</b>\n📉 Old Price: Rs. ${oldPrice.toFixed(0)}\n📈 New Price: <b>Rs. ${newPrice.toFixed(0)}</b>\n⬆️ Increase: Rs. ${diff.toFixed(0)} (+${pct}%)\n👤 Changed By: ${changedBy}\n\n✅ Price update ho gaya hai!`;\n\nreturn [{json:{message:msg}}];\n"
+      },
+      "id": "process",
+      "name": "Process Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot8284831786:AAEumveUPSNsgwAVl0Kc0gUM27lpeYDLAyc/sendMessage",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "7955481761"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "parse_mode",
+              "value": "HTML"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "telegram",
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Price Change Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Data": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

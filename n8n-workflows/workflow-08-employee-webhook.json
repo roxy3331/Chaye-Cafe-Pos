@@ -1,0 +1,96 @@
+{
+  "name": "08 - Employee Purchase Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "employee-purchase",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "trigger",
+      "name": "Employee Purchase Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Webhook se data aata hai: {employeeName, itemName, qty, price, employeeId}\nconst data = $input.item.json.body || $input.item.json;\nconst employeeName = data.employeeName || 'Unknown Employee';\nconst itemName     = data.itemName     || 'Unknown Item';\nconst qty          = data.qty          || 1;\nconst price        = data.price        || 0;\nconst total        = qty * price;\nconst now = new Date().toLocaleString('ur-PK',{timeZone:'Asia/Karachi'});\n\nconst msg = `👤 <b>CHAYE CAFE — Employee Purchase</b>\n\n🕐 Time: ${now}\n👨‍💼 Employee: <b>${employeeName}</b>\n📦 Item: ${itemName}\n🔢 Qty: ${qty}\n💰 Price: Rs. ${price} each\n💵 Total: <b>Rs. ${total.toFixed(0)}</b>\n\n⚠️ Owner please verify karo!`;\n\nreturn [{json:{message:msg}}];\n"
+      },
+      "id": "process",
+      "name": "Process Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot8284831786:AAEumveUPSNsgwAVl0Kc0gUM27lpeYDLAyc/sendMessage",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "7955481761"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "parse_mode",
+              "value": "HTML"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "telegram",
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Employee Purchase Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Data": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

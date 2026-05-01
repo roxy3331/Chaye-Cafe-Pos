@@ -12,12 +12,12 @@ export interface StockItem {
 export interface Vendor {
   id: string;
   name: string;
-  phoneNumber: string; // Company main number
-  salesmanName: string;
-  salesmanPhone: string;
-  orderBookerName: string;
-  orderBookerPhone: string;
-  lastPurchaseDate: string;
+  phoneNumber?: string; // Company main number (optional)
+  salesmanName?: string;
+  salesmanPhone?: string;
+  orderBookerName?: string;
+  orderBookerPhone?: string;
+  lastPurchaseDate?: string;
 }
 
 export interface Expense {

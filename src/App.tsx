@@ -22,7 +22,7 @@ export default function App() {
   React.useEffect(() => {
     let checkTimeout = setTimeout(() => {
       if (loading) setLoading(false);
-    }, 8000); // 8 second fallback
+    }, 8000);
 
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       try {
@@ -32,13 +32,11 @@ export default function App() {
           if (userDoc.exists()) {
             setUser({ role: userDoc.data().role });
           } else {
-            // User exists in Auth but not in Firestore - maybe a new signup in progress
             console.warn("User authenticated but profile not found in Firestore.");
           }
         }
       } catch (err) {
         console.error("Auth sync error (non-fatal):", err);
-        // We still setLoading(false) below to allow the app to show login or retry
       } finally {
         setLoading(false);
         clearTimeout(checkTimeout);
@@ -48,7 +46,7 @@ export default function App() {
       unsubscribe();
       clearTimeout(checkTimeout);
     };
-  }, []); // FIX: removed [loading] dep — caused double auth subscription on every loading state change
+  }, []);
 
   if (loading) {
     return (
@@ -81,4 +79,10 @@ export default function App() {
             <Route path="/vendors" element={<Vendors userRole={user.role} />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/analytics" element={user.role === 'owner' ? <Reports /> : <Navigate to="/" />} />
-            <Route path="*" element={<Navigate to="/" replace 
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Layout>
+      </ToastProvider>
+    </Router>
+  );
+}

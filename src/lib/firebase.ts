@@ -3,7 +3,6 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
-// Use the config JSON as the source of truth, but allow env overrides if present
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain,
@@ -13,18 +12,15 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId
 };
 
-// Log config keys (not values) for debugging if needed
 console.log("Firebase initialized for project:", firebaseConfig.projectId);
 
 const app = initializeApp(firebaseConfig);
 
-// FIX: Use firestoreDatabaseId from config — default getFirestore() connects to wrong DB
 const firestoreDatabaseId = (firebaseConfigJson as any).firestoreDatabaseId;
 export const db = firestoreDatabaseId
   ? getFirestore(app, firestoreDatabaseId)
   : getFirestore(app);
 
-// FIX: Pass app instance to getAuth() to avoid using wrong default app
 export const auth = getAuth(app);
 
 enum OperationType {
@@ -55,8 +51,7 @@ interface FirestoreErrorInfo {
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errMessage = error instanceof Error ? error.message : String(error);
-  
-  // Log the raw error object for index creation links and technical details
+
   console.error('Firestore Raw Error:', error);
 
   const errInfo: FirestoreErrorInfo = {
@@ -75,22 +70,22 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  
+
   console.error('Firestore Error Summary:', JSON.stringify(errInfo));
-  
-  // If it's an "offline" or "api-key" error, give a friendly hint
+
   if (errMessage.toLowerCase().includes('offline') || errMessage.toLowerCase().includes('api-key')) {
     console.error("HINT: This usually means the Firebase project isn't reachable. Check Project ID and API Key.");
   }
-  
+
   throw new Error(JSON.stringify(errInfo));
 }
 
 export { OperationType };
 
-// Test connection silently - don't log errors unless they are critical
 getDocFromServer(doc(db, '_connection_test_', 'test')).catch(err => {
   if (err.message.includes('permission-denied')) {
     console.log("Firestore connection verified (Permission Denied is expected for test path).");
   } else {
-    console.warn("Fir
+    console.warn("Firestore heartbeat failed:", err.message);
+  }
+});

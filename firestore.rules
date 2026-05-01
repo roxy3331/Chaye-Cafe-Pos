@@ -78,16 +78,15 @@ service cloud.firestore {
       allow update, delete: if isOwner();
     }
 
-    // Validation Blueprint for Vendor
+    // Validation Blueprint for Vendor (only name required, all other fields optional)
     function isValidVendor(data) {
-      return data.keys().hasAll(['name', 'contact']) &&
-             data.name is string && data.name.size() <= 100 &&
-             data.contact is string && data.contact.size() <= 50;
+      return data.keys().hasAll(['name']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100;
     }
 
     match /vendors/{vendorId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(vendorId) && isValidVendor(incoming());
+      allow create: if isSignedIn() && isValidVendor(incoming());
       allow update: if isSignedIn() && isValidVendor(incoming());
       allow delete: if isOwner();
     }
