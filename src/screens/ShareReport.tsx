@@ -24,7 +24,7 @@ export const ShareReport: React.FC = () => {
           </div>
           
           {/* Mock WhatsApp Bubble */}
-          <div className="bg-[#e5ddd5] p-6 rounded-3xl relative overflow-hidden shadow-inner min-h-[280px]">
+          <div className="bg-[var(--color-whatsapp-bg)] p-6 rounded-3xl relative overflow-hidden shadow-inner min-h-[280px]">
             <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_2px_2px,black_1px,transparent_0)] bg-[size:20px_20px]" />
             <div className="relative z-10 max-w-[85%] bg-white p-4 rounded-2xl rounded-tl-none shadow-sm">
               <div className="space-y-2">
@@ -64,7 +64,7 @@ export const ShareReport: React.FC = () => {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-xl border-t border-emerald-50 z-[80]">
-        <button className="w-full bg-[#25D366] text-white py-6 rounded-[24px] font-bold text-lg flex items-center justify-center gap-3 shadow-2xl shadow-emerald-900/20 active:scale-95 transition-all">
+        <button className="w-full bg-[var(--color-whatsapp-green)] text-white py-6 rounded-[24px] font-bold text-lg flex items-center justify-center gap-3 shadow-2xl shadow-emerald-900/20 active:scale-95 transition-all">
           <Send className="w-6 h-6" />
           Share to WhatsApp
         </button>

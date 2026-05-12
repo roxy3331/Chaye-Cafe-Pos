@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { auth, db } from './lib/firebase';
+import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { Layout } from './components/Layout';
 import { Dashboard } from './screens/Dashboard';
@@ -13,37 +14,87 @@ import { ShareReport } from './screens/ShareReport';
 import { Vendors } from './screens/Vendors';
 import { Login } from './screens/Login';
 import { OpeningStock } from './screens/OpeningStock';
+import { Khata } from './screens/Khata';
+import { KhataDetail } from './screens/KhataDetail';
+import { Returns } from './screens/Returns';
 import { ToastProvider } from './context/ToastContext';
+import { dataService } from './services/dataService';
 
 export default function App() {
   const [user, setUser] = React.useState<{ role: 'owner' | 'employee' } | null>(null);
   const [loading, setLoading] = React.useState(true);
 
+  // Hook 1 — auth listener (must be before any conditional return)
   React.useEffect(() => {
     let checkTimeout = setTimeout(() => {
       if (loading) setLoading(false);
-    }, 8000); // 8 second fallback
+    }, 2000); // Reduced from 8000ms to 2000ms
 
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
+      try {
+        if (firebaseUser) {
           const userRef = doc(db, 'users', firebaseUser.uid);
           const userDoc = await getDoc(userRef);
           if (userDoc.exists()) {
             setUser({ role: userDoc.data().role });
+          } else {
+            console.warn("User authenticated but profile not found in Firestore.");
           }
-        } catch (err) {
-          console.error("Auth sync error:", err);
         }
+      } catch (err) {
+        console.error("Auth sync error (non-fatal):", err);
+      } finally {
+        setLoading(false);
+        clearTimeout(checkTimeout);
       }
-      setLoading(false);
-      clearTimeout(checkTimeout);
     });
     return () => {
       unsubscribe();
       clearTimeout(checkTimeout);
     };
-  }, [loading]);
+  }, []);
+
+  // Hook 2 — monthly profit auto-save (must be before any conditional return)
+  React.useEffect(() => {
+    if (!user) return;
+    const checkMonthlyProfit = async () => {
+      try {
+        const now = new Date();
+        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const lastRecorded = await dataService.getLastRecordedMonth();
+
+        if (lastRecorded && lastRecorded !== currentMonthKey) {
+          const [ly, lm] = lastRecorded.split('-').map(Number);
+          const prevMonthStart = new Date(ly, lm - 1, 1, 0, 0, 0, 0);
+          const prevMonthEnd = new Date(ly, lm, 1, 0, 0, 0, 0);
+
+          const sales = await new Promise<any[]>((resolve) => {
+            const unsub = dataService.subscribeToSales((data) => {
+              unsub();
+              resolve(data);
+            });
+          });
+
+          const prevMonthProfit = sales
+            .filter(s => {
+              const d = s.date?.toDate?.();
+              return d && d >= prevMonthStart && d < prevMonthEnd;
+            })
+            .reduce((acc, s) => acc + (s.profit || 0), 0);
+
+          const monthLabel = prevMonthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+          await dataService.saveMonthlyProfit(lastRecorded, prevMonthProfit, monthLabel);
+        }
+
+        await dataService.setLastRecordedMonth(currentMonthKey);
+      } catch (err) {
+        console.warn('Monthly profit check failed (non-fatal):', err);
+      }
+    };
+    checkMonthlyProfit();
+  }, [user]);
+
+  // ---- All hooks above this line ----
 
   if (loading) {
     return (
@@ -56,6 +107,11 @@ export default function App() {
     );
   }
 
+  const handleLogout = async () => {
+    await signOut(auth);
+    setUser(null);
+  };
+
   if (!user) {
     return <Login onLogin={(role) => setUser({ role })} />;
   }
@@ -63,7 +119,7 @@ export default function App() {
   return (
     <Router>
       <ToastProvider>
-        <Layout userRole={user.role}>
+        <Layout userRole={user.role} onLogout={handleLogout}>
           <Routes>
             <Route path="/" element={<Dashboard userRole={user.role} />} />
             <Route path="/purchase" element={<Purchase userRole={user.role} />} />
@@ -72,8 +128,11 @@ export default function App() {
             <Route path="/reports/share" element={user.role === 'owner' ? <ShareReport /> : <Navigate to="/" />} />
             <Route path="/expenses" element={user.role === 'owner' ? <Expenses /> : <Navigate to="/" />} />
             <Route path="/expenses/add" element={user.role === 'owner' ? <AddExpense /> : <Navigate to="/" />} />
-            <Route path="/opening-stock" element={user.role === 'owner' ? <OpeningStock /> : <Navigate to="/" />} />
+            <Route path="/opening-stock" element={<OpeningStock />} />
             <Route path="/vendors" element={<Vendors userRole={user.role} />} />
+            <Route path="/khata" element={<Khata userRole={user.role} />} />
+            <Route path="/khata/:customerId" element={<KhataDetail userRole={user.role} />} />
+            <Route path="/returns" element={<Returns userRole={user.role} />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/analytics" element={user.role === 'owner' ? <Reports /> : <Navigate to="/" />} />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -7,17 +7,18 @@ export interface StockItem {
   currentSell: number;
   stock: number;
   status: 'Normal' | 'Low Stock' | 'Closed';
+  expiryDate?: string; // YYYY-MM-DD format
 }
 
 export interface Vendor {
   id: string;
   name: string;
-  phoneNumber: string; // Company main number
-  salesmanName: string;
-  salesmanPhone: string;
-  orderBookerName: string;
-  orderBookerPhone: string;
-  lastPurchaseDate: string;
+  phoneNumber?: string; // Company main number (optional)
+  salesmanName?: string;
+  salesmanPhone?: string;
+  orderBookerName?: string;
+  orderBookerPhone?: string;
+  lastPurchaseDate?: string;
 }
 
 export interface Expense {
@@ -39,4 +40,37 @@ export interface BatchRecord {
   remaining: number;
   netProfit: number;
   status: 'Closed';
+}
+
+export interface ReturnEntry {
+  id: string;
+  itemName: string;
+  category: string;
+  returnType: 'customer_return' | 'supplier_return';
+  quantity: number;        // in pcs
+  pcsPerPack: number;
+  buyPrice: number;
+  sellPrice: number;
+  reason?: string;
+  date: any;
+}
+
+export interface KhataCustomer {
+  id: string;
+  name: string;
+  phone?: string;
+  note?: string;
+  pin?: string;
+  totalBalance: number; // total udhar baaki (positive = customer pe baaki, negative = customer ne zyada diya)
+  createdAt: any;
+}
+
+export interface KhataTransaction {
+  id: string;
+  customerId: string;
+  customerName: string;
+  type: 'credit' | 'payment'; // credit = udhar diya, payment = paise aaye
+  amount: number;
+  note?: string;
+  date: any;
 }

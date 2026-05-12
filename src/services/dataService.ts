@@ -1,4 +1,4 @@
-import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, where, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, getDoc, setDoc, serverTimestamp, onSnapshot, increment, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 
 export const dataService = {
@@ -62,45 +62,42 @@ export const dataService = {
   // Purchases
   async addPurchase(purchase: any) {
     try {
-      // 1. Add purchase record
       await addDoc(collection(db, 'purchases'), {
         ...purchase,
         type: 'purchase',
-        date: serverTimestamp()
+        date: serverTimestamp(),
+        alerted: false   // n8n poller picks this up and sends Telegram
       });
 
-      // 2. Update stock (logic to find or create stock item)
       const q = query(collection(db, 'stock'), where('name', '==', purchase.itemName));
       const snap = await getDocs(q);
-      
+
       if (!snap.empty) {
         const stockDoc = snap.docs[0];
         const oldData = stockDoc.data() as any;
-        
-        // Record sale if there was a batch settlements
-        // CRITICAL: Skip profit if the existing stock was categorized as 'opening'
+
         const soldPcs = Math.max(0, (oldData.stock || 0) - (purchase.remainingUnits || 0));
         if (soldPcs > 0 && oldData.type !== 'opening') {
           const unitSize = oldData.pcsPerPack || 1;
           const soldUnits = soldPcs / unitSize;
           const oldAvgBuy = oldData.averageBuy || purchase.buyingPricePerPc;
-          
+          const oldSellPrice = oldData.currentSell || purchase.sellingPricePerPc;
+
           await addDoc(collection(db, 'sales'), {
             itemName: purchase.itemName,
             units: soldUnits,
             buyPrice: oldAvgBuy,
-            sellPrice: purchase.sellingPricePerPc,
-            profit: soldUnits * (purchase.sellingPricePerPc - oldAvgBuy),
+            sellPrice: oldSellPrice,
+            profit: soldUnits * (oldSellPrice - oldAvgBuy),
             date: serverTimestamp()
           });
         }
 
-        // Weighted Average Calculation
         const oldQty = purchase.remainingUnits || 0;
         const oldPrice = oldData.averageBuy || purchase.buyingPricePerPc;
         const newQty = purchase.totalPcs;
         const newPrice = purchase.buyingPricePerPc;
-        
+
         const weightedAvg = (oldQty + newQty) === 0
           ? newPrice
           : ((oldQty * oldPrice) + (newQty * newPrice)) / (oldQty + newQty);
@@ -112,7 +109,7 @@ export const dataService = {
           averageBuy: weightedAvg,
           currentSell: purchase.sellingPricePerPc,
           updatedAt: serverTimestamp(),
-          type: 'purchase' // Reset to purchase type
+          type: 'purchase'
         });
       } else {
         await addDoc(collection(db, 'stock'), {
@@ -134,13 +131,11 @@ export const dataService = {
 
   async addOpeningStock(data: any) {
     try {
-      // 1. Add opening record (optional but good for history)
       await addDoc(collection(db, 'openingStock'), {
         ...data,
         addedAt: serverTimestamp()
       });
 
-      // 2. Update stock aggregate
       const q = query(collection(db, 'stock'), where('name', '==', data.itemName));
       const snap = await getDocs(q);
 
@@ -149,7 +144,7 @@ export const dataService = {
         const oldData = stockDoc.data();
         await updateDoc(doc(db, 'stock', stockDoc.id), {
           stock: (oldData.stock || 0) + data.qty,
-          type: 'opening', // Mark as opening so next purchase skips profit
+          type: 'opening',
           updatedAt: serverTimestamp()
         });
       } else {
@@ -206,5 +201,249 @@ export const dataService = {
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, 'vendors');
     }
-  }
+  },
+
+  async getMonthlyProfits() {
+    try {
+      const snap = await getDocs(collection(db, 'monthlyProfits'));
+      return snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a: any, b: any) => (b.monthKey || '').localeCompare(a.monthKey || ''));
+    } catch (e) {
+      console.warn('getMonthlyProfits failed (non-fatal):', e);
+      return [];
+    }
+  },
+
+  async getLastRecordedMonth() {
+    try {
+      const d = await getDoc(doc(db, 'meta', 'monthlyTracker'));
+      return d.exists() ? (d.data().lastMonth as string) : null;
+    } catch (e) {
+      console.warn('getLastRecordedMonth failed (non-fatal):', e);
+      return null;
+    }
+  },
+
+  async setLastRecordedMonth(monthKey: string) {
+    try {
+      await setDoc(doc(db, 'meta', 'monthlyTracker'), { lastMonth: monthKey });
+    } catch (e) {
+      console.warn('setLastRecordedMonth failed (non-fatal):', e);
+    }
+  },
+
+  async saveMonthlyProfit(monthKey: string, profit: number, label: string) {
+    try {
+      await setDoc(doc(db, 'monthlyProfits', monthKey), {
+        monthKey,
+        label,
+        profit,
+        savedAt: serverTimestamp()
+      });
+    } catch (e) {
+      console.warn('saveMonthlyProfit failed (non-fatal):', e);
+    }
+  },
+
+  // Stock action alerts (delete / set-to-zero) — picked up by n8n poller
+  async addStockAlert(alert: { alertType: 'stock_delete' | 'stock_zero'; itemName: string; previousStock?: number; performedBy: string }) {
+    try {
+      await addDoc(collection(db, 'purchases'), {
+        ...alert,
+        alerted: false,
+        date: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn('addStockAlert failed (non-fatal):', e);
+    }
+  },
+
+  // ─── RETURNS SYSTEM ──────────────────────────────────────────────────────────
+
+  // Returns history (real-time, newest first)
+  subscribeToReturns(callback: (data: any[]) => void) {
+    const q = query(collection(db, 'returns'), orderBy('date', 'desc'));
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (e) => {
+      handleFirestoreError(e, OperationType.LIST, 'returns');
+    });
+  },
+
+  // Add return — atomic: record + update stock + (customer return) negative sale
+  async addReturn(ret: {
+    itemName: string;
+    category: string;
+    returnType: 'customer_return' | 'supplier_return';
+    quantity: number;   // in pcs
+    pcsPerPack: number;
+    buyPrice: number;
+    sellPrice: number;
+    reason?: string;
+  }) {
+    try {
+      const batch = writeBatch(db);
+
+      // 1. Record return entry
+      const retRef = doc(collection(db, 'returns'));
+      batch.set(retRef, { ...ret, date: serverTimestamp() });
+
+      // 2. Find the stock doc
+      const stockQ = query(collection(db, 'stock'), where('name', '==', ret.itemName));
+      const stockSnap = await getDocs(stockQ);
+
+      if (!stockSnap.empty) {
+        const stockDoc = stockSnap.docs[0];
+        const currentStock = (stockDoc.data().stock as number) || 0;
+
+        if (ret.returnType === 'customer_return') {
+          // Customer returned item → stock goes back up
+          batch.update(stockDoc.ref, {
+            stock: currentStock + ret.quantity,
+            updatedAt: serverTimestamp(),
+          });
+          // Negative sale to reduce profit (atomic)
+          const soldUnits = ret.quantity / (ret.pcsPerPack || 1);
+          const saleRef = doc(collection(db, 'sales'));
+          batch.set(saleRef, {
+            itemName: ret.itemName,
+            units: -soldUnits,
+            buyPrice: ret.buyPrice,
+            sellPrice: ret.sellPrice,
+            profit: -(soldUnits * (ret.sellPrice - ret.buyPrice)),
+            date: serverTimestamp(),
+            isReturn: true,
+            reason: ret.reason || '',
+          });
+        } else {
+          // Supplier return → stock decreases (you're sending it back)
+          batch.update(stockDoc.ref, {
+            stock: Math.max(0, currentStock - ret.quantity),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      await batch.commit();
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, 'returns');
+    }
+  },
+
+  // ─── KHATA SYSTEM ────────────────────────────────────────────────────────────
+
+  // Customer list (real-time)
+  subscribeToKhataCustomers(callback: (data: any[]) => void) {
+    return onSnapshot(collection(db, 'khataCustomers'), (snap) => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // sort by name
+      list.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+      callback(list);
+    }, (e) => {
+      handleFirestoreError(e, OperationType.LIST, 'khataCustomers');
+    });
+  },
+
+  // Add new customer
+  async addKhataCustomer(customer: { name: string; phone?: string; note?: string; pin?: string }) {
+    try {
+      const docRef = await addDoc(collection(db, 'khataCustomers'), {
+        ...customer,
+        totalBalance: 0,
+        createdAt: serverTimestamp(),
+      });
+      return docRef.id;
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, 'khataCustomers');
+    }
+  },
+
+  // Delete customer + ALL their transactions (cascade) — owner only
+  async deleteKhataCustomer(customerId: string) {
+    try {
+      const txSnap = await getDocs(
+        query(collection(db, 'khataTransactions'), where('customerId', '==', customerId))
+      );
+      const batch = writeBatch(db);
+      txSnap.docs.forEach(d => batch.delete(d.ref));
+      batch.delete(doc(db, 'khataCustomers', customerId));
+      await batch.commit();
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `khataCustomers/${customerId}`);
+    }
+  },
+
+  // Subscribe to a SINGLE customer doc (efficient — no full collection scan)
+  subscribeToSingleKhataCustomer(customerId: string, callback: (data: any | null) => void) {
+    return onSnapshot(doc(db, 'khataCustomers', customerId), (snap) => {
+      callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    }, (e) => {
+      handleFirestoreError(e, OperationType.LIST, `khataCustomers/${customerId}`);
+    });
+  },
+
+  // Update customer info
+  async updateKhataCustomer(customerId: string, updates: { name?: string; phone?: string; note?: string; pin?: string }) {
+    try {
+      await updateDoc(doc(db, 'khataCustomers', customerId), updates);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `khataCustomers/${customerId}`);
+    }
+  },
+
+  // Transactions (real-time) for one customer
+  subscribeToKhataTransactions(customerId: string, callback: (data: any[]) => void) {
+    const q = query(
+      collection(db, 'khataTransactions'),
+      where('customerId', '==', customerId),
+      orderBy('date', 'desc')
+    );
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (e) => {
+      handleFirestoreError(e, OperationType.LIST, 'khataTransactions');
+    });
+  },
+
+  // Add credit (udhar diya) or payment (paise aaye)
+  // Uses atomic increment — race condition safe
+  async addKhataTransaction(tx: {
+    customerId: string;
+    customerName: string;
+    type: 'credit' | 'payment';
+    amount: number;
+    note?: string;
+  }) {
+    try {
+      const delta = tx.type === 'credit' ? tx.amount : -tx.amount;
+      const batch = writeBatch(db);
+
+      // 1. Add transaction record
+      const txRef = doc(collection(db, 'khataTransactions'));
+      batch.set(txRef, { ...tx, date: serverTimestamp() });
+
+      // 2. Atomically update customer balance (no race condition)
+      const custRef = doc(db, 'khataCustomers', tx.customerId);
+      batch.update(custRef, { totalBalance: increment(delta) });
+
+      await batch.commit();
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, 'khataTransactions');
+    }
+  },
+
+  // Delete a single transaction and atomically reverse balance
+  async deleteKhataTransaction(tx: { id: string; customerId: string; type: 'credit' | 'payment'; amount: number }) {
+    try {
+      // Reverse delta: credit was +amount to balance, so subtract; payment was -amount, so add back
+      const reverseDelta = tx.type === 'credit' ? -tx.amount : tx.amount;
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'khataTransactions', tx.id));
+      batch.update(doc(db, 'khataCustomers', tx.customerId), { totalBalance: increment(reverseDelta) });
+      await batch.commit();
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `khataTransactions/${tx.id}`);
+    }
+  },
 };
