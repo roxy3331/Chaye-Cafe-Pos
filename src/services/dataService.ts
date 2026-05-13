@@ -387,8 +387,9 @@ export const dataService = {
   // Add new customer
   async addKhataCustomer(customer: { name: string; phone?: string; note?: string; pin?: string; creditLimit?: number; trustBadge?: 'regular' | 'reliable' | 'caution' }) {
     try {
+      const cleaned = Object.fromEntries(Object.entries(customer).filter(([, v]) => v !== undefined && v !== null));
       const docRef = await addDoc(collection(db, 'khataCustomers'), {
-        ...customer,
+        ...cleaned,
         pinned: false,
         pinnedAt: serverTimestamp(),
         totalBalance: 0,
