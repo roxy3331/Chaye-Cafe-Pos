@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Phone, UserCircle, Search, ExternalLink, Calendar, MoreVertical, Loader2, X, Plus } from 'lucide-react';
+import { Users, Phone, UserCircle, Search, ExternalLink, Calendar, Loader2, X, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Vendor } from '../types';
 import { dataService } from '../services/dataService';
@@ -39,16 +39,20 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
     }
   };
 
-  const filteredVendors = (vendors || []).filter(v => 
-    v.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    v.phoneNumber.includes(searchTerm) ||
-    v.salesmanPhone.includes(searchTerm) ||
-    v.orderBookerPhone.includes(searchTerm)
-  );
+  const filteredVendors = (vendors || []).filter(v => {
+    const q = searchTerm.toLowerCase();
+    return (
+      v.name?.toLowerCase().includes(q) ||
+      (v.phoneNumber || '').includes(q) ||
+      (v.salesmanName || '').toLowerCase().includes(q) ||
+      (v.salesmanPhone || '').includes(q) ||
+      (v.orderBookerPhone || '').includes(q)
+    );
+  });
 
   const handleAddVendor = async () => {
-    if (!newVendor.name || !newVendor.phoneNumber) {
-      showToast('Name and Phone are required', 'warning');
+    if (!newVendor.name.trim()) {
+      showToast('Company name required hai', 'warning');
       return;
     }
     setLoading(true);
@@ -129,9 +133,6 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                     </div>
                   </div>
                 </div>
-                <button className="p-2 text-slate-400 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg transition-colors">
-                  <MoreVertical className="w-5 h-5" />
-                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -202,9 +203,10 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
               onClick={() => setShowAddModal(false)}
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              initial={{ opacity: 0, y: '100%' }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
               className="relative w-full max-w-lg glass-card rounded-[40px] p-8 shadow-2xl space-y-6"
             >
               <div className="flex justify-between items-center">
@@ -220,38 +222,38 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                   <input 
                     type="text" 
                     placeholder="e.g. Nestle Pakistan" 
-                    className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none"
+                    className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none focus:ring-2 focus:ring-emerald-900/20"
                     value={newVendor.name}
                     onChange={(e) => setNewVendor({...newVendor, name: e.target.value})}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Company Phone</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Company Phone <span className="normal-case text-slate-400 font-normal">(optional)</span></label>
                   <input 
                     type="text" 
                     placeholder="0300-1234567" 
-                    className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none"
+                    className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none focus:ring-2 focus:ring-emerald-900/20"
                     value={newVendor.phoneNumber}
                     onChange={(e) => setNewVendor({...newVendor, phoneNumber: e.target.value})}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Salesman Name</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Salesman Name <span className="normal-case text-slate-400 font-normal">(opt)</span></label>
                     <input 
                       type="text" 
                       placeholder="Name" 
-                      className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none"
+                      className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none focus:ring-2 focus:ring-emerald-900/20"
                       value={newVendor.salesmanName}
                       onChange={(e) => setNewVendor({...newVendor, salesmanName: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Salesman Phone</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Salesman Phone <span className="normal-case text-slate-400 font-normal">(opt)</span></label>
                     <input 
                       type="text" 
                       placeholder="Phone" 
-                      className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none"
+                      className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none focus:ring-2 focus:ring-emerald-900/20"
                       value={newVendor.salesmanPhone}
                       onChange={(e) => setNewVendor({...newVendor, salesmanPhone: e.target.value})}
                     />
@@ -259,21 +261,21 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Order Booker Name</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Order Booker Name <span className="normal-case text-slate-400 font-normal">(opt)</span></label>
                     <input 
                       type="text" 
                       placeholder="Name" 
-                      className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none"
+                      className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none focus:ring-2 focus:ring-emerald-900/20"
                       value={newVendor.orderBookerName}
                       onChange={(e) => setNewVendor({...newVendor, orderBookerName: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Order Booker Phone</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Order Booker Phone <span className="normal-case text-slate-400 font-normal">(opt)</span></label>
                     <input 
                       type="text" 
                       placeholder="Phone" 
-                      className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none"
+                      className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none focus:ring-2 focus:ring-emerald-900/20"
                       value={newVendor.orderBookerPhone}
                       onChange={(e) => setNewVendor({...newVendor, orderBookerPhone: e.target.value})}
                     />

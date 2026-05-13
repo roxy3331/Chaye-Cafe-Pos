@@ -122,7 +122,7 @@ export const AddExpense: React.FC = () => {
           <input 
             type="text" 
             placeholder="e.g. Electricity Bill May" 
-            className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none"
+            className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none focus:ring-2 focus:ring-emerald-900/20"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -132,7 +132,7 @@ export const AddExpense: React.FC = () => {
           <input 
             type="number" 
             placeholder="0.00" 
-            className="w-full bg-emerald-50/30 border-none rounded-2xl py-6 px-6 text-5xl font-bold text-emerald-900 focus:ring-4 focus:ring-emerald-900/5 transition-all outline-none" 
+            className="w-full bg-emerald-50/30 border-none rounded-2xl py-6 px-6 text-5xl font-bold text-emerald-900 focus:ring-2 focus:ring-emerald-900/20 transition-all outline-none" 
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
@@ -140,7 +140,7 @@ export const AddExpense: React.FC = () => {
         <div className="space-y-2">
           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2">Category</label>
           <select 
-            className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none"
+            className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none focus:ring-2 focus:ring-emerald-900/20"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           >

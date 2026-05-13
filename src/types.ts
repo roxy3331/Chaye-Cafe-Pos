@@ -61,8 +61,13 @@ export interface KhataCustomer {
   phone?: string;
   note?: string;
   pin?: string;
+  pinned?: boolean;
+  pinnedAt?: any;
   totalBalance: number; // total udhar baaki (positive = customer pe baaki, negative = customer ne zyada diya)
   createdAt: any;
+  creditLimit?: number;        // max allowed udhar (0 = no limit)
+  trustBadge?: 'regular' | 'reliable' | 'caution'; // manual trust rating
+  lastTransactionAt?: any;     // Firestore timestamp of last tx (for inactive flag)
 }
 
 export interface KhataTransaction {
@@ -73,4 +78,6 @@ export interface KhataTransaction {
   amount: number;
   note?: string;
   date: any;
+  updatedAt?: any;
+  dueDate?: string; // YYYY-MM-DD, optional payment due date
 }

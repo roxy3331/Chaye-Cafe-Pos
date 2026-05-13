@@ -15,6 +15,8 @@ export const OpeningStock: React.FC = () => {
   const [qty, setQty] = React.useState('1');
   const [category, setCategory] = React.useState('🏷️ Other');
   const [pcsPerPack, setPcsPerPack] = React.useState('1');
+  const [buyingPrice, setBuyingPrice] = React.useState('');
+  const [sellingPrice, setSellingPrice] = React.useState('');
 
   const categories = [
     '🥤 Cold Drinks',
@@ -40,6 +42,8 @@ export const OpeningStock: React.FC = () => {
     setSearchTerm(item.name);
     setCategory(item.category || '🏷️ Other');
     setPcsPerPack(item.pcsPerPack?.toString() || '1');
+    setBuyingPrice(item.averageBuy?.toString() || '');
+    setSellingPrice(item.currentSell?.toString() || '');
   };
 
   const handleSave = async () => {
@@ -58,6 +62,8 @@ export const OpeningStock: React.FC = () => {
         qty: sanitizedQty * sanitizedPcsPerPack,
         category,
         pcsPerPack: sanitizedPcsPerPack,
+        averageBuy: parseFloat(buyingPrice) || 0,
+        currentSell: parseFloat(sellingPrice) || 0,
         type: 'opening'
       });
       showToast('Opening stock added!', 'success');
@@ -140,13 +146,37 @@ export const OpeningStock: React.FC = () => {
 
           <div className="space-y-4">
             <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest px-1">Pieces per Pack (Bundle Size)</label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               className="w-full px-6 py-5 bg-emerald-50/30 border border-emerald-100 rounded-[24px] focus:ring-4 focus:ring-emerald-900/5 transition-all outline-none font-bold text-emerald-900 text-center"
               value={pcsPerPack}
               onChange={(e) => setPcsPerPack(e.target.value)}
             />
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center">Total units to be added: <span className="text-emerald-600">{(parseInt(qty || '0') * parseInt(pcsPerPack || '0'))} pieces</span></p>
+          </div>
+
+          {/* Price Fields */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-emerald-100">
+            <div className="space-y-4">
+              <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest px-1">Buying Price (PKR/Unit) — Optional</label>
+              <input
+                type="number"
+                className="w-full px-6 py-5 bg-emerald-50/30 border border-emerald-100 rounded-[24px] focus:ring-4 focus:ring-emerald-900/5 transition-all outline-none font-bold text-emerald-900"
+                value={buyingPrice}
+                onChange={(e) => setBuyingPrice(e.target.value)}
+                placeholder="e.g. 985"
+              />
+            </div>
+            <div className="space-y-4">
+              <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest px-1">Selling Price (PKR/Unit) — Optional</label>
+              <input
+                type="number"
+                className="w-full px-6 py-5 bg-emerald-50/30 border border-emerald-100 rounded-[24px] focus:ring-4 focus:ring-emerald-900/5 transition-all outline-none font-bold text-emerald-900"
+                value={sellingPrice}
+                onChange={(e) => setSellingPrice(e.target.value)}
+                placeholder="e.g. 1680"
+              />
+            </div>
           </div>
         </div>
 

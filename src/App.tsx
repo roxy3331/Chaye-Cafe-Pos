@@ -21,8 +21,16 @@ import { ToastProvider } from './context/ToastContext';
 import { dataService } from './services/dataService';
 
 export default function App() {
-  const [user, setUser] = React.useState<{ role: 'owner' | 'employee' } | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [user, setUser] = React.useState<{ role: 'owner' | 'employee' } | null>(() => {
+    try {
+      const cached = window.localStorage.getItem('chaye:userRole');
+      if (cached === 'owner' || cached === 'employee') return { role: cached as 'owner' | 'employee' };
+    } catch {}
+    return null;
+  });
+  const [loading, setLoading] = React.useState(() => {
+    try { return !window.localStorage.getItem('chaye:userRole'); } catch { return true; }
+  });
 
   // Hook 1 — auth listener (must be before any conditional return)
   React.useEffect(() => {
@@ -36,10 +44,15 @@ export default function App() {
           const userRef = doc(db, 'users', firebaseUser.uid);
           const userDoc = await getDoc(userRef);
           if (userDoc.exists()) {
-            setUser({ role: userDoc.data().role });
+            const role = userDoc.data().role as 'owner' | 'employee';
+            setUser({ role });
+            try { window.localStorage.setItem('chaye:userRole', role); } catch {}
           } else {
             console.warn("User authenticated but profile not found in Firestore.");
           }
+        } else {
+          setUser(null);
+          try { window.localStorage.removeItem('chaye:userRole'); } catch {}
         }
       } catch (err) {
         console.error("Auth sync error (non-fatal):", err);
@@ -110,6 +123,7 @@ export default function App() {
   const handleLogout = async () => {
     await signOut(auth);
     setUser(null);
+    try { window.localStorage.removeItem('chaye:userRole'); } catch {}
   };
 
   if (!user) {

@@ -1,4 +1,4 @@
-import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, getDoc, setDoc, serverTimestamp, onSnapshot, increment, writeBatch } from 'firebase/firestore';
+import { collection, doc, addDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, getDoc, setDoc, serverTimestamp, onSnapshot, increment, writeBatch, deleteField } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 
 export const dataService = {
@@ -203,6 +203,45 @@ export const dataService = {
     }
   },
 
+  async addOrUpdateVendorFromPurchase(data: {
+    companyName: string;
+    salesmanName?: string;
+    salesmanPhone?: string;
+    orderBookerName?: string;
+    orderBookerPhone?: string;
+  }) {
+    try {
+      if (!data.salesmanName && !data.salesmanPhone && !data.orderBookerName && !data.orderBookerPhone) return;
+      const snap = await getDocs(collection(db, 'vendors'));
+      const match = snap.docs.find(d => {
+        const v = d.data();
+        return (data.salesmanPhone && v.salesmanPhone === data.salesmanPhone) ||
+               v.name?.toLowerCase() === data.companyName.toLowerCase();
+      });
+      const today = new Date().toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: 'numeric' });
+      if (match) {
+        const updates: any = { lastPurchaseDate: today };
+        if (data.salesmanName) updates.salesmanName = data.salesmanName;
+        if (data.salesmanPhone) updates.salesmanPhone = data.salesmanPhone;
+        if (data.orderBookerName) updates.orderBookerName = data.orderBookerName;
+        if (data.orderBookerPhone) updates.orderBookerPhone = data.orderBookerPhone;
+        await updateDoc(doc(db, 'vendors', match.id), updates);
+      } else {
+        await addDoc(collection(db, 'vendors'), {
+          name: data.companyName,
+          phoneNumber: '',
+          salesmanName: data.salesmanName || '',
+          salesmanPhone: data.salesmanPhone || '',
+          orderBookerName: data.orderBookerName || '',
+          orderBookerPhone: data.orderBookerPhone || '',
+          lastPurchaseDate: today,
+        });
+      }
+    } catch (e) {
+      console.warn('addOrUpdateVendorFromPurchase failed (non-fatal):', e);
+    }
+  },
+
   async getMonthlyProfits() {
     try {
       const snap = await getDocs(collection(db, 'monthlyProfits'));
@@ -346,10 +385,12 @@ export const dataService = {
   },
 
   // Add new customer
-  async addKhataCustomer(customer: { name: string; phone?: string; note?: string; pin?: string }) {
+  async addKhataCustomer(customer: { name: string; phone?: string; note?: string; pin?: string; creditLimit?: number; trustBadge?: 'regular' | 'reliable' | 'caution' }) {
     try {
       const docRef = await addDoc(collection(db, 'khataCustomers'), {
         ...customer,
+        pinned: false,
+        pinnedAt: serverTimestamp(),
         totalBalance: 0,
         createdAt: serverTimestamp(),
       });
@@ -384,8 +425,18 @@ export const dataService = {
   },
 
   // Update customer info
-  async updateKhataCustomer(customerId: string, updates: { name?: string; phone?: string; note?: string; pin?: string }) {
+  async updateKhataCustomer(customerId: string, updates: { name?: string; phone?: string; note?: string; pin?: string; creditLimit?: number; trustBadge?: 'regular' | 'reliable' | 'caution' | null }) {
     try {
+      await updateDoc(doc(db, 'khataCustomers', customerId), updates);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `khataCustomers/${customerId}`);
+    }
+  },
+
+  async setKhataCustomerPinned(customerId: string, pinned: boolean) {
+    try {
+      const updates: any = { pinned };
+      updates.pinnedAt = pinned ? serverTimestamp() : deleteField();
       await updateDoc(doc(db, 'khataCustomers', customerId), updates);
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `khataCustomers/${customerId}`);
@@ -414,18 +465,21 @@ export const dataService = {
     type: 'credit' | 'payment';
     amount: number;
     note?: string;
+    dueDate?: string;
   }) {
     try {
       const delta = tx.type === 'credit' ? tx.amount : -tx.amount;
       const batch = writeBatch(db);
 
-      // 1. Add transaction record
+      // 1. Add transaction record (strip undefined fields — Firestore rejects them)
       const txRef = doc(collection(db, 'khataTransactions'));
-      batch.set(txRef, { ...tx, date: serverTimestamp() });
+      const txData: Record<string, any> = { date: serverTimestamp() };
+      Object.entries(tx).forEach(([k, v]) => { if (v !== undefined) txData[k] = v; });
+      batch.set(txRef, txData);
 
-      // 2. Atomically update customer balance (no race condition)
+      // 2. Atomically update customer balance + lastTransactionAt
       const custRef = doc(db, 'khataCustomers', tx.customerId);
-      batch.update(custRef, { totalBalance: increment(delta) });
+      batch.update(custRef, { totalBalance: increment(delta), lastTransactionAt: serverTimestamp() });
 
       await batch.commit();
     } catch (e) {
@@ -444,6 +498,38 @@ export const dataService = {
       await batch.commit();
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, `khataTransactions/${tx.id}`);
+    }
+  },
+
+  async updateKhataTransaction(params: {
+    id: string;
+    customerId: string;
+    type: 'credit' | 'payment';
+    previousAmount: number;
+    nextAmount: number;
+    note?: string;
+  }) {
+    try {
+      const batch = writeBatch(db);
+      const txRef = doc(db, 'khataTransactions', params.id);
+      const updates: any = {
+        amount: params.nextAmount,
+        updatedAt: serverTimestamp(),
+      };
+      if (params.note !== undefined) {
+        updates.note = params.note ? params.note : deleteField();
+      }
+
+      if (params.nextAmount !== params.previousAmount) {
+        const diff = params.nextAmount - params.previousAmount;
+        const balanceDelta = params.type === 'credit' ? diff : -diff;
+        batch.update(doc(db, 'khataCustomers', params.customerId), { totalBalance: increment(balanceDelta) });
+      }
+
+      batch.update(txRef, updates);
+      await batch.commit();
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `khataTransactions/${params.id}`);
     }
   },
 };

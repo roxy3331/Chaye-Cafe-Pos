@@ -32,9 +32,11 @@ export const Reports: React.FC = () => {
 
   React.useEffect(() => {
     let unsubscribeSales: () => void;
+    let safetyTimer: ReturnType<typeof setTimeout>;
 
     const fetch = async () => {
       setLoading(true);
+      safetyTimer = setTimeout(() => setLoading(false), 8000);
       try {
         const stockItems = await new Promise<any[]>((resolve) => {
           const unsub = dataService.subscribeToStock((data) => {
@@ -131,7 +133,7 @@ export const Reports: React.FC = () => {
       }
     };
     fetch();
-    return () => unsubscribeSales?.();
+    return () => { unsubscribeSales?.(); clearTimeout(safetyTimer); };
   }, []);
 
   const loadTopSellers = async () => {
@@ -451,7 +453,7 @@ export const Reports: React.FC = () => {
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-emerald-50)" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: 'var(--color-slate-400)' }} />
-              <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }} />
+              <Tooltip cursor={{ fill: 'var(--color-slate-50)' }} contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }} />
               <Bar dataKey="value" radius={[12, 12, 0, 0]}>
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={['var(--color-emerald-800)','var(--color-green-500)','var(--color-red-500)','var(--color-green-400)'][index] ?? 'var(--color-emerald-800)'} />
@@ -489,8 +491,9 @@ export const Reports: React.FC = () => {
         <button
           onClick={() => {
             const message = 'Business Report Summary from Shop Hisab POS';
-            const phone = '923001234567'; // Replace with actual business number
-            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+            const phone = import.meta.env.VITE_BUSINESS_WHATSAPP || window.localStorage.getItem('chaye:businessWhatsApp') || '';
+            if (!phone) { showToast('Settings mein business WhatsApp number set karein', 'warning'); return; }
+            window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
           }}
           className="w-full bg-[var(--color-whatsapp-green)] text-white py-6 rounded-3xl font-bold flex items-center justify-center gap-3 shadow-xl hover:bg-[var(--color-whatsapp-green-dark)] transition-all"
         >
@@ -518,9 +521,10 @@ export const Reports: React.FC = () => {
               onClick={() => setShowTopSellers(false)}
             />
             <motion.div
-              initial={{ opacity: 0, y: 60 }}
+              initial={{ opacity: 0, y: '100%' }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 60 }}
+              exit={{ opacity: 0, y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
               className="relative w-full sm:max-w-2xl glass-card rounded-t-[40px] sm:rounded-[40px] p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-hidden flex flex-col"
             >
               <div className="flex justify-between items-center mb-6 shrink-0">

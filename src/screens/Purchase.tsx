@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShoppingCart, Search, Info, History, TrendingDown, Package, Layers, CheckCircle, Users, Loader2, Filter } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { dataService } from '../services/dataService';
 import { useNavigate } from 'react-router-dom';
@@ -16,7 +16,9 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
   const [newQuantity, setNewQuantity] = React.useState('1'); 
   const [pcsPerPack, setPcsPerPack] = React.useState('1'); 
   const [remainingUnits, setRemainingUnits] = React.useState('0');
+  const [expiryDate, setExpiryDate] = React.useState('');
   const [selectedUnitCat, setSelectedUnitCat] = React.useState<'bottles' | 'snacks' | 'biscuits' | 'cigarettes' | 'velo' | 'custom'>('custom');
+  const [showPackagingPicker, setShowPackagingPicker] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [existingItems, setExistingItems] = React.useState<any[]>([]);
   const [foundItem, setFoundItem] = React.useState<any | null>(null);
@@ -76,8 +78,10 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
   const unitOptions = {
     bottles: [
       { label: '250ml (24 pcs)', value: '24' },
+      { label: '300ml (24 pcs)', value: '24' },
       { label: '500ml (12 pcs)', value: '12' },
       { label: '1.5L (6 pcs)', value: '6' },
+      { label: '2.25L (4 pcs)', value: '4' },
     ],
     snacks: [
       { label: '30 pcs', value: '30' },
@@ -90,6 +94,7 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
     ],
     cigarettes: [
       { label: '1 Polister (10 packs)', value: '10' },
+      { label: '5 Packs', value: '5' },
     ],
     velo: [
       { label: '1 Polister (5 boxes)', value: '5' },
@@ -128,8 +133,18 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
         salesmanPhone,
         orderBookerName,
         orderBookerPhone,
-        remainingUnits: sanitizedRemaining
+        remainingUnits: sanitizedRemaining,
+        ...(expiryDate ? { expiryDate } : {}),
       });
+      if (salesmanName || salesmanPhone || orderBookerName || orderBookerPhone) {
+        await dataService.addOrUpdateVendorFromPurchase({
+          companyName: itemName,
+          salesmanName: salesmanName || undefined,
+          salesmanPhone: salesmanPhone || undefined,
+          orderBookerName: orderBookerName || undefined,
+          orderBookerPhone: orderBookerPhone || undefined,
+        });
+      }
       showToast('Stock updated successfully!', 'success');
       navigate('/stock');
     } catch (e) {
@@ -180,7 +195,7 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
                     className="p-4 bg-white rounded-xl border border-emerald-50 text-left hover:border-emerald-600 transition-all group"
                    >
                      <p className="text-sm font-bold text-emerald-950 group-hover:text-emerald-700">{item.name}</p>
-                     <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{item.stock} in stock</p>
+                     <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{Math.floor((item.stock || 0) / (item.pcsPerPack || 1))} Box/Pkt in stock</p>
                    </button>
                  ))}
                </motion.div>
@@ -329,69 +344,105 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
               </div>
             </div>
 
+            {/* Expiry Date */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
+                Expiry Date <span className="normal-case font-medium text-slate-400">(Optional)</span>
+              </label>
+              <input
+                type="date"
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value)}
+                className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-base font-bold text-emerald-900 focus:ring-2 focus:ring-emerald-900/5 outline-none"
+              />
+            </div>
+
             {/* Unit Selector */}
             <div className="pt-6 border-t border-emerald-50">
-              <div className="flex items-center gap-3 mb-6">
-                <Layers className="w-5 h-5 text-emerald-700" />
-                <h4 className="font-bold text-emerald-900 uppercase text-xs tracking-widest">Select Packaging / Unit Size</h4>
-              </div>
-              
-              <div className="flex flex-wrap gap-2 mb-6 bg-emerald-50/50 p-1.5 rounded-2xl w-fit">
-                {[
-                  { id: 'bottles', label: 'Bottles' },
-                  { id: 'snacks', label: 'Snacks/Chips' },
-                  { id: 'biscuits', label: 'Biscuits' },
-                  { id: 'cigarettes', label: 'Cigarettes' },
-                  { id: 'velo', label: 'Velo' },
-                  { id: 'custom', label: 'Manual' }
-                ].map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setSelectedUnitCat(cat.id as any)}
-                    className={cn(
-                      "px-5 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all",
-                      selectedUnitCat === cat.id 
-                        ? "bg-emerald-900 text-white shadow-lg" 
-                        : "text-emerald-900/60 hover:bg-emerald-100"
-                    )}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {selectedUnitCat !== 'custom' ? (
-                  unitOptions[selectedUnitCat as keyof typeof unitOptions].map((opt) => (
-                    <button
-                      key={opt.label}
-                      onClick={() => setPcsPerPack(opt.value)}
-                      className={cn(
-                        "p-4 rounded-2xl border-2 text-left transition-all group",
-                        pcsPerPack === opt.value 
-                          ? "border-emerald-900 bg-emerald-50 shadow-inner" 
-                          : "border-emerald-50 bg-white hover:border-emerald-200"
-                      )}
-                    >
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 group-hover:text-emerald-600 transition-colors">Standard Pack</p>
-                      <p className="text-sm font-black text-emerald-950">{opt.label}</p>
-                    </button>
-                  ))
-                ) : (
-                  <div className="col-span-full">
-                    <div className="max-w-xs space-y-2">
-                       <input 
-                        type="number" 
-                        value={pcsPerPack}
-                        onChange={(e) => setPcsPerPack(e.target.value)}
-                        className="w-full bg-white border-2 border-emerald-900/10 rounded-2xl py-4 px-6 text-xl font-bold text-emerald-900 focus:border-emerald-900 outline-none"
-                        placeholder="Pcs per pack (e.g. 1)"
-                      />
-                      <p className="text-[10px] font-bold text-slate-400 italic px-1 text-xs">Tip: Use 1 if you are adding loose pieces directly.</p>
-                    </div>
+              <button
+                type="button"
+                onClick={() => setShowPackagingPicker(prev => !prev)}
+                className="w-full flex items-center justify-between bg-emerald-50/70 hover:bg-emerald-100 transition-colors px-4 py-3 rounded-2xl"
+              >
+                <div className="flex items-center gap-3">
+                  <Layers className="w-5 h-5 text-emerald-700" />
+                  <div className="text-left">
+                    <h4 className="font-bold text-emerald-900 uppercase text-xs tracking-widest">Select Packaging / Unit Size</h4>
+                    <p className="text-[10px] text-slate-400 font-semibold">
+                      {showPackagingPicker ? 'Hide presets' : 'Tap to choose presets'}
+                    </p>
                   </div>
+                </div>
+                <span className="text-sm font-bold text-emerald-700">{showPackagingPicker ? '−' : '+'}</span>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {showPackagingPicker && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex flex-wrap gap-2 mt-6 mb-6 bg-emerald-50/50 p-1.5 rounded-2xl w-fit">
+                      {[
+                        { id: 'bottles', label: 'Bottles' },
+                        { id: 'snacks', label: 'Snacks/Chips' },
+                        { id: 'biscuits', label: 'Biscuits' },
+                        { id: 'cigarettes', label: 'Cigarettes' },
+                        { id: 'velo', label: 'Velo' },
+                        { id: 'custom', label: 'Manual' }
+                      ].map((cat) => (
+                        <button
+                          key={cat.id}
+                          onClick={() => setSelectedUnitCat(cat.id as any)}
+                          className={cn(
+                            "px-5 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all",
+                            selectedUnitCat === cat.id
+                              ? "bg-emerald-900 text-white shadow-lg"
+                              : "text-emerald-900/60 hover:bg-emerald-100"
+                          )}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {selectedUnitCat !== 'custom' ? (
+                        unitOptions[selectedUnitCat as keyof typeof unitOptions].map((opt) => (
+                          <button
+                            key={opt.label}
+                            onClick={() => setPcsPerPack(opt.value)}
+                            className={cn(
+                              "p-4 rounded-2xl border-2 text-left transition-all group",
+                              pcsPerPack === opt.value
+                                ? "border-emerald-900 bg-emerald-50 shadow-inner"
+                                : "border-emerald-50 bg-white hover:border-emerald-200"
+                            )}
+                          >
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 group-hover:text-emerald-600 transition-colors">Standard Pack</p>
+                            <p className="text-sm font-black text-emerald-950">{opt.label}</p>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="col-span-full">
+                          <div className="max-w-xs space-y-2">
+                            <input
+                              type="number"
+                              value={pcsPerPack}
+                              onChange={(e) => setPcsPerPack(e.target.value)}
+                              className="w-full bg-white border-2 border-emerald-900/10 rounded-2xl py-4 px-6 text-xl font-bold text-emerald-900 focus:border-emerald-900 outline-none"
+                              placeholder="Pcs per pack (e.g. 1)"
+                            />
+                            <p className="text-[10px] font-bold text-slate-400 italic px-1 text-xs">Tip: Use 1 if you are adding loose pieces directly.</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
                 )}
-              </div>
+              </AnimatePresence>
             </div>
           </section>
 
@@ -484,14 +535,26 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
                 </div>
 
                 <div className="space-y-2 py-2">
-                   <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-slate-400">
+                  <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-slate-400">
                     <span>Buying Cost</span>
                     <span className="text-emerald-950">{purchasePrice || '0'} /Unit</span>
                   </div>
-                   <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-slate-400">
+                  <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-slate-400">
                     <span>Selling Rate</span>
                     <span className="text-emerald-950">{salePrice || '0'} /Unit</span>
                   </div>
+                  {(parseFloat(purchasePrice) > 0 || parseFloat(salePrice) > 0) && (
+                    <div className="flex justify-between text-xs font-bold uppercase tracking-widest pt-1 border-t border-emerald-100">
+                      <span className="text-slate-400">Profit / Pcs</span>
+                      <span className={cn(
+                        (parseFloat(salePrice) || 0) >= (parseFloat(purchasePrice) || 0)
+                          ? 'text-emerald-600' : 'text-red-500'
+                      )}>
+                        {(parseFloat(salePrice) || 0) >= (parseFloat(purchasePrice) || 0) ? '+' : ''}
+                        {(((parseFloat(salePrice) || 0) - (parseFloat(purchasePrice) || 0)) / (parseInt(pcsPerPack) || 1)).toFixed(0)} /Pcs
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
