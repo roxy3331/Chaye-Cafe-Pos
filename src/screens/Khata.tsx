@@ -281,12 +281,12 @@ export const Khata: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ delay: i * 0.04 }}
-                    className="bg-white border border-emerald-50 rounded-3xl p-5 flex items-center gap-4 hover:shadow-md transition-all cursor-pointer group"
+                    className="bg-white border border-emerald-50 rounded-2xl p-3.5 flex items-center gap-3 hover:shadow-md transition-all cursor-pointer"
                     onClick={() => navigate(`/khata/${customer.id}`)}
                   >
                     {/* Avatar */}
                     <div className={cn(
-                      "w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg shrink-0",
+                      "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-base shrink-0",
                       isOwed ? "bg-red-100 text-red-700" : isClear ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
                     )}>
                       {customer.name.charAt(0).toUpperCase()}
@@ -295,7 +295,7 @@ export const Khata: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-bold text-emerald-950 text-base truncate">{customer.name}</p>
+                        <p className="font-bold text-emerald-950 text-sm leading-tight">{customer.name}</p>
                         {customer.trustBadge && (() => {
                           const cfg = trustBadgeConfig[customer.trustBadge];
                           const Icon = cfg.icon;
@@ -311,11 +311,11 @@ export const Khata: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
                         })()}
                       </div>
                       {customer.pinned && (
-                        <p className="text-[9px] text-emerald-500 font-bold uppercase tracking-[0.3em]">PINNED</p>
+                        <span className="text-[8px] text-emerald-600 font-bold uppercase tracking-[0.2em] bg-emerald-50 px-1.5 py-0.5 rounded-full">📌 Pinned</span>
                       )}
                       {customer.phone && (
-                        <p className="text-xs text-slate-400 font-medium flex items-center gap-1 mt-0.5">
-                          <Phone className="w-3 h-3" />
+                        <p className="text-[10px] text-slate-400 font-medium flex items-center gap-0.5 mt-0.5">
+                          <Phone className="w-2.5 h-2.5" />
                           {customer.phone}
                         </p>
                       )}
@@ -337,47 +337,23 @@ export const Khata: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
                       ) : null}
                     </div>
 
-                    {/* Balance */}
-                    <div className="text-right shrink-0">
+                    {/* Balance — right corner */}
+                    <div className="text-right shrink-0 ml-auto">
                       <p className={cn(
-                        "text-lg font-bold",
+                        "text-base font-bold",
                         isOwed ? "text-red-600" : isClear ? "text-emerald-600" : "text-blue-600"
                       )}>
                         {balancesHidden ? '••••' : `Rs ${Math.abs(bal).toLocaleString()}`}
                       </p>
                       <p className={cn(
-                        "text-[10px] font-bold uppercase tracking-widest",
+                        "text-[9px] font-bold uppercase tracking-widest",
                         isOwed ? "text-red-400" : isClear ? "text-emerald-400" : "text-blue-400"
                       )}>
                         {balancesHidden ? '—' : (isOwed ? 'Baaki Hai' : isClear ? 'Saaf' : 'Advance')}
                       </p>
                     </div>
 
-                    {/* Owner actions */}
-                    {userRole === 'owner' && (
-                      <div className="flex items-center gap-1 ml-1">
-                        <button
-                          onClick={e => { e.stopPropagation(); handleTogglePin(customer); }}
-                          className={cn(
-                            "p-2 rounded-xl transition-all",
-                            "md:opacity-0 md:group-hover:opacity-100",
-                            customer.pinned ? 'bg-emerald-50 text-emerald-700' : 'text-slate-300 hover:bg-emerald-50 hover:text-emerald-700'
-                          )}
-                          title={customer.pinned ? 'Unpin' : 'Pin to top'}
-                          disabled={pinningId === customer.id}
-                        >
-                          {customer.pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-                        </button>
-                        <button
-                          onClick={e => { e.stopPropagation(); setDeleteConfirm(customer.id); }}
-                          className="p-2 rounded-xl hover:bg-red-50 text-slate-300 hover:text-red-500 transition-all md:opacity-0 md:group-hover:opacity-100"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-
-                    <ChevronRight className="w-5 h-5 text-slate-300 shrink-0 ml-1" />
+                    <ChevronRight className="w-4 h-4 text-slate-200 shrink-0" />
                   </motion.div>
                 );
               })}

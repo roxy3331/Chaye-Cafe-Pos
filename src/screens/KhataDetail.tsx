@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Phone, Loader2, X, Trash2, Edit2, Save,
-  AlertCircle, MessageCircle, Building2
+  AlertCircle, MessageCircle, Building2, Pin, PinOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -140,6 +140,7 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
   const [showPinInput, setShowPinInput] = React.useState(false);
   const [balanceHidden, setBalanceHidden] = React.useState(false);
   const [editSaving, setEditSaving] = React.useState(false);
+  const [pinning, setPinning] = React.useState(false);
 
   // Delete confirms
   const [deleteTxConfirm, setDeleteTxConfirm] = React.useState<KhataTransaction | null>(null);
@@ -234,6 +235,19 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
       showToast(detail.slice(0, 80), 'error');
     }
     finally { setTxSaving(false); }
+  };
+
+  const handleTogglePin = async () => {
+    if (!customerId || !customer) return;
+    setPinning(true);
+    try {
+      await dataService.setKhataCustomerPinned(customerId, !customer.pinned);
+      showToast(!customer.pinned ? '📌 Pinned to top ✅' : 'Unpinned ✅', 'success');
+    } catch {
+      showToast('Pin update nahi ho saka', 'error');
+    } finally {
+      setPinning(false);
+    }
   };
 
   const handleEditSave = async () => {
@@ -408,36 +422,51 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
       <div
         className={cn(
           'grid gap-2 mb-5',
-          userRole === 'owner' ? 'grid-cols-4 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3'
+          userRole === 'owner' ? 'grid-cols-5' : 'grid-cols-2 sm:grid-cols-3'
         )}
       >
-        <button onClick={() => handleWhatsAppShare('customer')} className="flex flex-col items-center gap-1.5 py-3 bg-white border border-emerald-100 rounded-2xl hover:bg-green-50 transition-colors">
+        <button onClick={() => handleWhatsAppShare('customer')} className="flex flex-col items-center gap-1 py-2.5 bg-white border border-emerald-100 rounded-2xl hover:bg-green-50 transition-colors">
           <MessageCircle className="w-5 h-5 text-green-600" />
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Customer</span>
+          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Customer</span>
         </button>
         <button
           onClick={() => handleWhatsAppShare('business')}
-          className="flex flex-col items-center gap-1.5 py-3 bg-white border border-emerald-100 rounded-2xl hover:bg-emerald-50 transition-colors"
+          className="flex flex-col items-center gap-1 py-2.5 bg-white border border-emerald-100 rounded-2xl hover:bg-emerald-50 transition-colors"
         >
           <Building2 className="w-5 h-5 text-emerald-700" />
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Business</span>
+          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Business</span>
         </button>
         {userRole === 'owner' && (
           <button
             onClick={() => { setEditName(customer.name); setEditPhone(customer.phone || ''); setEditNote(customer.note || ''); setEditCreditLimit(customer.creditLimit ? String(customer.creditLimit) : ''); setEditTrustBadge((customer.trustBadge as any) || ''); setShowEditModal(true); }}
-            className="flex flex-col items-center gap-1.5 py-3 bg-white border border-emerald-100 rounded-2xl hover:bg-emerald-50 transition-colors"
+            className="flex flex-col items-center gap-1 py-2.5 bg-white border border-emerald-100 rounded-2xl hover:bg-emerald-50 transition-colors"
           >
             <Edit2 className="w-5 h-5 text-emerald-700" />
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Edit</span>
+            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Edit</span>
+          </button>
+        )}
+        {userRole === 'owner' && (
+          <button
+            onClick={handleTogglePin}
+            disabled={pinning}
+            className={cn(
+              'flex flex-col items-center gap-1 py-2.5 border rounded-2xl transition-colors',
+              customer.pinned
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : 'bg-white border-emerald-100 hover:bg-emerald-50 text-slate-400 hover:text-emerald-700'
+            )}
+          >
+            {customer.pinned ? <PinOff className="w-5 h-5" /> : <Pin className="w-5 h-5" />}
+            <span className="text-[9px] font-bold uppercase tracking-wide">{customer.pinned ? 'Unpin' : 'Pin'}</span>
           </button>
         )}
         {userRole === 'owner' && (
           <button
             onClick={() => { if (window.confirm('Yeh customer aur sari entries delete ho jayengi. Sure?')) { dataService.deleteKhataCustomer(customerId!).then(() => { showToast('Customer delete ✅', 'success'); navigate('/khata'); }); } }}
-            className="flex flex-col items-center gap-1.5 py-3 bg-white border border-red-100 rounded-2xl hover:bg-red-50 transition-colors"
+            className="flex flex-col items-center gap-1 py-2.5 bg-white border border-red-100 rounded-2xl hover:bg-red-50 transition-colors"
           >
             <Trash2 className="w-5 h-5 text-red-500" />
-            <span className="text-[10px] font-bold text-red-400 uppercase tracking-wide">Delete</span>
+            <span className="text-[9px] font-bold text-red-400 uppercase tracking-wide">Delete</span>
           </button>
         )}
       </div>
