@@ -80,8 +80,6 @@ export interface KhataTransaction {
   date: any;
   updatedAt?: any;
   dueDate?: string; // YYYY-MM-DD, optional payment due date
-  createdBy?: 'owner' | 'employee'; // who added this entry
-  updatedBy?: 'owner' | 'employee'; // who last edited this entry
 }
 
 // ============ PUBG Hisab ============

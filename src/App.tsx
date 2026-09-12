@@ -1,8 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { auth } from './lib/firebase';
+import { auth, db } from './lib/firebase';
 import { signOut } from 'firebase/auth';
-import { isOwnerUid } from './lib/config';
+import { doc, getDoc } from 'firebase/firestore';
 import { Layout } from './components/Layout';
 import { ToastProvider } from './context/ToastContext';
 import { dataService } from './services/dataService';
@@ -21,7 +21,6 @@ const OpeningStock = React.lazy(() => import('./screens/OpeningStock').then(m =>
 const Khata        = React.lazy(() => import('./screens/Khata').then(m => ({ default: m.Khata })));
 const KhataDetail  = React.lazy(() => import('./screens/KhataDetail').then(m => ({ default: m.KhataDetail })));
 const Returns      = React.lazy(() => import('./screens/Returns').then(m => ({ default: m.Returns })));
-const History      = React.lazy(() => import('./screens/History').then(m => ({ default: m.History })));
 const Pubg         = React.lazy(() => import('./screens/Pubg').then(m => ({ default: m.Pubg })));
 const Shop         = React.lazy(() => import('./screens/Shop').then(m => ({ default: m.Shop })));
 
@@ -52,11 +51,15 @@ export default function App() {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          // Owner role comes ONLY from the pinned UID list (src/lib/config.ts);
-          // the users collection can never grant owner under the hardened rules.
-          const role: 'owner' | 'employee' = isOwnerUid(firebaseUser.uid) ? 'owner' : 'employee';
-          setUser({ role });
-          try { window.localStorage.setItem('chaye:userRole', role); } catch {}
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userRef);
+          if (userDoc.exists()) {
+            const role = userDoc.data().role as 'owner' | 'employee';
+            setUser({ role });
+            try { window.localStorage.setItem('chaye:userRole', role); } catch {}
+          } else {
+            console.warn("User authenticated but profile not found in Firestore.");
+          }
         } else {
           setUser(null);
           try { window.localStorage.removeItem('chaye:userRole'); } catch {}
@@ -181,7 +184,6 @@ export default function App() {
               <Route path="/khata" element={<Khata userRole={user.role} />} />
               <Route path="/khata/:customerId" element={<KhataDetail userRole={user.role} />} />
               <Route path="/returns" element={<Returns userRole={user.role} />} />
-              <Route path="/history" element={<History userRole={user.role} />} />
               <Route path="/pubg" element={user.role === 'owner' ? <Pubg userRole={user.role} /> : <Navigate to="/" />} />
               <Route path="/shop" element={user.role === 'owner' ? <Shop userRole={user.role} /> : <Navigate to="/" />} />
               <Route path="/settings" element={<Settings />} />

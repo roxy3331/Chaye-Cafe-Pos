@@ -1,33 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MoreVertical, TrendingUp, ListTodo, Wallet, Info, Send, CheckCheck, Loader2, Building2 } from 'lucide-react';
+import { ArrowLeft, MoreVertical, TrendingUp, ListTodo, Wallet, Info, Send, CheckCheck, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { dataService } from '../services/dataService';
 import { filterByPeriod, computePnL } from '../lib/periodUtils';
-import { useToast } from '../context/ToastContext';
-
-interface ReportData {
-  revenue: number;
-  totalExpenses: number;
-  netProfit: number;
-  topItems: { name: string; units: number }[];
-}
-
-const WA_KEY = 'chaye:businessWhatsApp';
 
 export const ShareReport: React.FC = () => {
   const navigate = useNavigate();
-  const { showToast } = useToast();
-  const [data, setData] = React.useState<ReportData | null>(null);
-
-  // Metric toggles (now real — they change the shared message)
-  const [showProfit, setShowProfit] = React.useState(true);
-  const [showBreakdown, setShowBreakdown] = React.useState(false);
-  const [showExpenses, setShowExpenses] = React.useState(true);
-  const [businessNumber, setBusinessNumber] = React.useState(() => {
-    try { return window.localStorage.getItem(WA_KEY) || ''; } catch { return ''; }
-  });
+  const [pnl, setPnl] = React.useState<{ revenue: number; totalExpenses: number; netProfit: number } | null>(null);
 
   // REAL numbers (previously this screen showed hardcoded mock: 45,200 / 12,400 / 32,800).
   React.useEffect(() => {
@@ -39,23 +20,10 @@ export const ShareReport: React.FC = () => {
           const todaySales = filterByPeriod(sales, 'today');
           const todayExpenses = filterByPeriod(expenses, 'today');
           const result = computePnL(todaySales, todayExpenses);
-
-          // Top items (units) from today's sales — for the breakdown toggle
-          const itemMap: Record<string, number> = {};
-          todaySales.forEach((s: any) => {
-            const name = s.itemName || 'Unknown';
-            itemMap[name] = (itemMap[name] || 0) + (Number(s.units) || 0);
-          });
-          const topItems = Object.entries(itemMap)
-            .map(([name, units]) => ({ name, units: Math.round(units * 10) / 10 }))
-            .filter(d => d.units > 0)
-            .sort((a, b) => b.units - a.units)
-            .slice(0, 5);
-
-          setData({ revenue: result.revenue, totalExpenses: result.totalExpenses, netProfit: result.netProfit, topItems });
+          setPnl({ revenue: result.revenue, totalExpenses: result.totalExpenses, netProfit: result.netProfit });
         });
       } catch {
-        setData({ revenue: 0, totalExpenses: 0, netProfit: 0, topItems: [] });
+        setPnl({ revenue: 0, totalExpenses: 0, netProfit: 0 });
       }
     })();
     return () => unsub?.();
@@ -63,32 +31,6 @@ export const ShareReport: React.FC = () => {
 
   const today = new Date().toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' });
   const fmt = (n: number) => Math.round(n).toLocaleString();
-
-  const buildMessage = (): string => {
-    const lines = ['*CHAYE CAFE - Daily Hisab*', today, ''];
-    lines.push(`Sales (Aaj): Rs ${fmt(data!.revenue)}`);
-    if (showExpenses) lines.push(`Kharcha: Rs ${fmt(data!.totalExpenses)}`);
-    if (showProfit) {
-      lines.push('');
-      lines.push(`*Net Profit: Rs ${fmt(data!.netProfit)}*`);
-    }
-    if (showBreakdown && data!.topItems.length > 0) {
-      lines.push('', '_Aaj ke top items:_');
-      data!.topItems.forEach(t => lines.push(`• ${t.name} — ${t.units} units`));
-    }
-    return lines.join('\n');
-  };
-
-  const handleShare = () => {
-    if (!data) { showToast('Report load ho raha hai...', 'warning'); return; }
-    const num = businessNumber.replace(/[^0-9]/g, '');
-    try { window.localStorage.setItem(WA_KEY, businessNumber.trim()); } catch {}
-    const text = encodeURIComponent(buildMessage());
-    const url = num
-      ? `https://wa.me/${num.length === 10 && num.startsWith('3') ? `92${num}` : num}?text=${text}`
-      : `https://wa.me/?text=${text}`;
-    window.open(url, '_blank');
-  };
 
   return (
     <div className="max-w-md mx-auto space-y-8 pb-32 animate-in fade-in slide-in-from-bottom-6 min-h-screen">
@@ -104,47 +46,24 @@ export const ShareReport: React.FC = () => {
         <section className="space-y-4">
           <div className="flex justify-between items-center px-1">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Message Preview</p>
-            <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full">LIVE</span>
+            <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full">DRAFT</span>
           </div>
-
-          {/* WhatsApp Bubble — shows exactly what will be shared */}
+          
+          {/* Mock WhatsApp Bubble */}
           <div className="bg-[var(--color-whatsapp-bg)] p-6 rounded-3xl relative overflow-hidden shadow-inner min-h-[280px]">
             <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_2px_2px,black_1px,transparent_0)] bg-[size:20px_20px]" />
             <div className="relative z-10 max-w-[85%] bg-white p-4 rounded-2xl rounded-tl-none shadow-sm">
               <div className="space-y-2">
                 <p className="text-sm font-bold text-emerald-800">CHAYE CAFE - Daily Hisab</p>
                 <p className="text-[10px] text-slate-400 border-b border-emerald-50 pb-2">{today}</p>
-                <div className="space-y-1.5 text-xs font-medium pt-2">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 font-normal">Sales (Aaj)</span>
-                    <span className="text-emerald-950">{data ? fmt(data.revenue) : <Loader2 className="w-3 h-3 animate-spin inline" />}</span>
-                  </div>
-                  {showExpenses && (
-                    <div className="flex justify-between">
-                      <span className="text-slate-400 font-normal">Kharcha</span>
-                      <span className="text-emerald-950">{data ? fmt(data.totalExpenses) : '...'}</span>
-                    </div>
-                  )}
-                  {showProfit && (
-                    <>
-                      <div className="border-t border-dashed border-emerald-100 my-1" />
-                      <div className="flex justify-between">
-                        <span className="text-emerald-900 font-bold">Net Profit</span>
-                        <span className="text-emerald-500 font-bold">{data ? fmt(data.netProfit) : '...'}</span>
-                      </div>
-                    </>
-                  )}
-                  {showBreakdown && data && data.topItems.length > 0 && (
-                    <div className="pt-1.5 space-y-1">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">Top Items</p>
-                      {data.topItems.map(t => (
-                        <div key={t.name} className="flex justify-between">
-                          <span className="text-slate-500 font-normal">• {t.name}</span>
-                          <span className="text-slate-500">{t.units} u</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div className="grid grid-cols-2 gap-y-2 text-xs font-medium pt-2">
+                  <span className="text-slate-400 font-normal">Sales (Aaj)</span>
+                  <span className="text-right text-emerald-950">{pnl ? fmt(pnl.revenue) : <Loader2 className="w-3 h-3 animate-spin inline" />}</span>
+                  <span className="text-slate-400 font-normal">Expenses</span>
+                  <span className="text-right text-emerald-950">{pnl ? fmt(pnl.totalExpenses) : '...'}</span>
+                  <div className="col-span-2 border-t border-dashed border-emerald-100 my-1" />
+                  <span className="text-emerald-900 font-bold">Net Profit</span>
+                  <span className="text-right text-emerald-500 font-bold">{pnl ? fmt(pnl.netProfit) : '...'}</span>
                 </div>
                 <div className="flex justify-end items-center gap-1 pt-1 opacity-40">
                   <span className="text-[8px]">10:42 AM</span>
@@ -158,28 +77,10 @@ export const ShareReport: React.FC = () => {
         <section className="space-y-4">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Select Metrics</p>
           <div className="space-y-3">
-            <ToggleCard icon={<TrendingUp />} label="Include Profit" desc="Show net earning summary" checked={showProfit} onToggle={() => setShowProfit(v => !v)} />
-            <ToggleCard icon={<ListTodo />} label="Item Breakdown" desc="Aaj ke top 5 items" checked={showBreakdown} onToggle={() => setShowBreakdown(v => !v)} />
-            <ToggleCard icon={<Wallet />} label="Expense Detail" desc="Kharcha summary" checked={showExpenses} onToggle={() => setShowExpenses(v => !v)} />
+            <ToggleCard icon={<TrendingUp />} label="Include Profit" desc="Show net earning summary" checked />
+            <ToggleCard icon={<ListTodo />} label="Item Breakdown" desc="Individual product sales" />
+            <ToggleCard icon={<Wallet />} label="Expense Detail" desc="List major spending" checked />
           </div>
-        </section>
-
-        <section className="space-y-4">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Business WhatsApp (optional)</p>
-          <div className="glass-card p-4 rounded-3xl flex items-center gap-3">
-            <Building2 className="w-5 h-5 text-emerald-900 shrink-0" />
-            <input
-              type="tel"
-              inputMode="tel"
-              value={businessNumber}
-              onChange={(e) => setBusinessNumber(e.target.value)}
-              placeholder="03XX-XXXXXXX (message is number pe jayegi)"
-              className="flex-1 bg-transparent text-sm font-medium text-slate-700 placeholder:text-slate-300 outline-none"
-            />
-          </div>
-          <p className="text-[10px] text-slate-400 font-medium px-1">
-            Number khali chhoren to contact-picker khulega. Reports screen ka "Business WhatsApp" button bhi yehi number use karta hai.
-          </p>
         </section>
 
         <div className="bg-emerald-50/50 p-6 rounded-3xl border border-emerald-100 flex gap-4">
@@ -191,22 +92,17 @@ export const ShareReport: React.FC = () => {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-xl border-t border-emerald-50 z-[80]">
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          onClick={handleShare}
-          disabled={!data}
-          className="w-full bg-[var(--color-whatsapp-green)] text-white py-6 rounded-[24px] font-bold text-lg flex items-center justify-center gap-3 shadow-2xl shadow-emerald-900/20 transition-all disabled:opacity-60"
-        >
+        <button className="w-full bg-[var(--color-whatsapp-green)] text-white py-6 rounded-[24px] font-bold text-lg flex items-center justify-center gap-3 shadow-2xl shadow-emerald-900/20 active:scale-95 transition-all">
           <Send className="w-6 h-6" />
           Share to WhatsApp
-        </motion.button>
+        </button>
       </div>
     </div>
   );
 };
 
-const ToggleCard = ({ icon, label, desc, checked, onToggle }: any) => (
-  <button onClick={onToggle} className="glass-card p-6 rounded-3xl flex items-center justify-between border-transparent transition-all hover:bg-white shadow-sm w-full text-left">
+const ToggleCard = ({ icon, label, desc, checked }: any) => (
+  <div className="glass-card p-6 rounded-3xl flex items-center justify-between border-transparent transition-all hover:bg-white shadow-sm">
     <div className="flex items-center gap-4">
       <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-900">
         {React.cloneElement(icon as React.ReactElement, { className: "w-6 h-6" })}
@@ -219,5 +115,5 @@ const ToggleCard = ({ icon, label, desc, checked, onToggle }: any) => (
     <div className={cn("w-12 h-7 rounded-full p-1 transition-all", checked ? "bg-emerald-900" : "bg-slate-200")}>
       <div className={cn("w-5 h-5 bg-white rounded-full shadow-sm transition-all", checked ? "translate-x-5" : "translate-x-0")} />
     </div>
-  </button>
+  </div>
 );

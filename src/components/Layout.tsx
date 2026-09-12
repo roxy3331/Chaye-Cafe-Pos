@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Package, ReceiptIndianRupee, BarChart3, Menu, Bell, Users, X, LogOut, Settings, BookOpen, RotateCcw, Gamepad2, ShoppingBag, History as HistoryIcon } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, ReceiptIndianRupee, BarChart3, Menu, Bell, Users, X, LogOut, Settings, BookOpen, RotateCcw, Gamepad2, ShoppingBag } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { dataService } from '../services/dataService';
 import { AnimatedShinyText } from './magicui';
@@ -136,7 +136,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout }) 
           <SidebarLink to="/vendors" icon={<Users />} label="Vendors" />
           <SidebarLink to="/khata" icon={<BookOpen />} label="Khata" />
           <SidebarLink to="/returns" icon={<RotateCcw />} label="Returns" />
-          <SidebarLink to="/history" icon={<HistoryIcon />} label="Entry History" />
           {userRole === 'owner' && <SidebarLink to="/pubg" icon={<Gamepad2 />} label="PUBG Hisab" />}
           {userRole === 'owner' && <SidebarLink to="/shop" icon={<ShoppingBag />} label="Online Shop" />}
           {userRole === 'owner' && <SidebarLink to="/reports" icon={<BarChart3 />} label="Reports" />}
@@ -197,7 +196,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout }) 
           <MobileDrawerLink to="/vendors" icon={<Users />} label="Vendors" />
           <MobileDrawerLink to="/khata" icon={<BookOpen />} label="Khata" />
           <MobileDrawerLink to="/returns" icon={<RotateCcw />} label="Returns" />
-          <MobileDrawerLink to="/history" icon={<HistoryIcon />} label="Entry History" />
           {userRole === 'owner' && <MobileDrawerLink to="/pubg" icon={<Gamepad2 />} label="PUBG Hisab" />}
           {userRole === 'owner' && <MobileDrawerLink to="/shop" icon={<ShoppingBag />} label="Online Shop" />}
           {userRole === 'owner' && <MobileDrawerLink to="/reports" icon={<BarChart3 />} label="Reports" />}

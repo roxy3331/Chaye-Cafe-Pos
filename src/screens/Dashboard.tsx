@@ -26,12 +26,8 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
   // PUBG + Online Shop profits for the owner "Business Summary" row
   const [bizStats, setBizStats] = React.useState({ pubgToday: 0, pubgMonth: 0, shopToday: 0, shopMonth: 0 });
   // Stock context for the same row — invested paisa + item count (taake card kabhi
-  // "khaali" na lage jab tak sale na ho). Count/invested sirf in-stock (quantity > 0)
-  // items se — bik chuke items card ko "koi stock nahi" nahi dikha sakte.
-  const [bizItems, setBizItems] = React.useState({
-    pubgInvested: 0, pubgCount: 0, pubgLoaded: false,
-    shopInvested: 0, shopCount: 0, shopLoaded: false,
-  });
+  // "khaali" na lage jab tak sale na ho)
+  const [bizItems, setBizItems] = React.useState({ pubgInvested: 0, pubgCount: 0, shopInvested: 0, shopCount: 0 });
 
   const stockItemsRef = React.useRef<any[]>([]);
   // Track which item names sold in the last 7 days, so the stock callback can also
@@ -159,26 +155,20 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
       setBizStats(prev => ({ ...prev, shopToday: t, shopMonth: m }));
     });
 
-    // PUBG + Shop stock context (invested + item count) for the Business Summary cards.
-    // In-stock only (quantity > 0): sold-out docs shouldn't count as "stock", and
-    // totalInvested already tracks the CURRENT stock's cost (it decrements on sale).
+    // PUBG + Shop stock context (invested + item count) for the Business Summary cards
     const unsubPubgItems = dataService.subscribeToPubgItems((pubgItems) => {
-      const inStock = pubgItems.filter((i: any) => (Number(i.quantity) || 0) > 0);
       setBizItems(prev => ({
         ...prev,
-        pubgInvested: inStock.reduce((a: number, i: any) => a + (Number(i.totalInvested) || 0), 0),
-        pubgCount: inStock.length,
-        pubgLoaded: true,
+        pubgInvested: pubgItems.reduce((a: number, i: any) => a + (Number(i.totalInvested) || 0), 0),
+        pubgCount: pubgItems.length,
       }));
     });
 
     const unsubShopItems = dataService.subscribeToShopItems((shopItems) => {
-      const inStock = shopItems.filter((i: any) => (Number(i.quantity) || 0) > 0);
       setBizItems(prev => ({
         ...prev,
-        shopInvested: inStock.reduce((a: number, i: any) => a + (Number(i.totalInvested) || 0), 0),
-        shopCount: inStock.length,
-        shopLoaded: true,
+        shopInvested: shopItems.reduce((a: number, i: any) => a + (Number(i.totalInvested) || 0), 0),
+        shopCount: shopItems.length,
       }));
     });
 
@@ -261,14 +251,8 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
         const combinedMonth = stats.monthActualProfit + bizStats.pubgMonth + bizStats.shopMonth;
         const bizCards = [
           { label: 'Cafe', icon: <Coffee className="w-4 h-4" />, today: stats.todayActualProfit, month: stats.monthActualProfit, to: '/reports', sub: null as string | null },
-          { label: 'PUBG', icon: <Gamepad2 className="w-4 h-4" />, today: bizStats.pubgToday, month: bizStats.pubgMonth, to: '/pubg',
-            sub: !bizItems.pubgLoaded ? 'Stock load ho raha hai…'
-              : bizItems.pubgCount > 0 ? `${bizItems.pubgCount} items · Rs ${Math.round(bizItems.pubgInvested).toLocaleString()} lagaya`
-              : 'Abhi koi stock nahi — PUBG Hisab kholen' },
-          { label: 'Online Shop', icon: <ShoppingBag className="w-4 h-4" />, today: bizStats.shopToday, month: bizStats.shopMonth, to: '/shop',
-            sub: !bizItems.shopLoaded ? 'Stock load ho raha hai…'
-              : bizItems.shopCount > 0 ? `${bizItems.shopCount} products · Rs ${Math.round(bizItems.shopInvested).toLocaleString()} lagaya`
-              : 'Abhi koi product nahi — Online Shop kholen' },
+          { label: 'PUBG', icon: <Gamepad2 className="w-4 h-4" />, today: bizStats.pubgToday, month: bizStats.pubgMonth, to: '/pubg', sub: bizItems.pubgCount > 0 ? `${bizItems.pubgCount} items · Rs ${Math.round(bizItems.pubgInvested).toLocaleString()} lagaya` : 'Abhi koi stock nahi — PUBG Hisab kholen' },
+          { label: 'Online Shop', icon: <ShoppingBag className="w-4 h-4" />, today: bizStats.shopToday, month: bizStats.shopMonth, to: '/shop', sub: bizItems.shopCount > 0 ? `${bizItems.shopCount} products · Rs ${Math.round(bizItems.shopInvested).toLocaleString()} lagaya` : 'Abhi koi product nahi — Online Shop kholen' },
         ];
         return (
           <FlipIn delay={0.4}>

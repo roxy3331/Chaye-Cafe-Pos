@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { TrendingUp, BarChart3, Wallet, Info, Share2, Loader2, Trophy, TrendingDown, X, Calendar, Receipt, Tag, PiggyBank, ArrowDown, ArrowUp } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -13,7 +12,6 @@ const PERIODS: Period[] = ['today', 'month', 'year', 'all'];
 
 export const Reports: React.FC = () => {
   const { showToast } = useToast();
-  const navigate = useNavigate();
   const [loading, setLoading] = React.useState(true);
   const [period, setPeriod] = React.useState<Period>('all');
   const [showTopSellers, setShowTopSellers] = React.useState(false);
@@ -620,24 +618,13 @@ export const Reports: React.FC = () => {
         </div>
       </section>
 
-      <div className="pt-4 px-2 space-y-2">
+      <div className="pt-4 px-2">
         <button
           onClick={() => {
-            const phone = (import.meta.env.VITE_BUSINESS_WHATSAPP || window.localStorage.getItem('chaye:businessWhatsApp') || '').replace(/[^0-9]/g, '');
-            if (!phone) {
-              showToast('Pehle Share screen par business number set karein', 'warning');
-              navigate('/reports/share');
-              return;
-            }
-            const message = [
-              `*CHAYE CAFE - ${PERIOD_LABELS[period]} Report*`,
-              '',
-              `Sales: Rs ${Math.round(pnl.revenue).toLocaleString()}`,
-              `Gross Profit: Rs ${Math.round(pnl.grossProfit).toLocaleString()}`,
-              `Kharcha: Rs ${Math.round(pnl.totalExpenses).toLocaleString()}`,
-              `*Net Profit: Rs ${Math.round(pnl.netProfit).toLocaleString()}*`,
-            ].join('\n');
-            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+            const message = 'Business Report Summary from Shop Hisab POS';
+            const phone = import.meta.env.VITE_BUSINESS_WHATSAPP || window.localStorage.getItem('chaye:businessWhatsApp') || '';
+            if (!phone) { showToast('Settings mein business WhatsApp number set karein', 'warning'); return; }
+            window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
           }}
           className="w-full bg-[var(--color-whatsapp-green)] text-white py-6 rounded-3xl font-bold flex items-center justify-center gap-3 shadow-xl hover:bg-[var(--color-whatsapp-green-dark)] transition-all"
         >
@@ -645,34 +632,11 @@ export const Reports: React.FC = () => {
           Business WhatsApp
         </button>
         <button
-          onClick={async () => {
-            const message = [
-              `CHAYE CAFE - ${PERIOD_LABELS[period]} Report`,
-              '',
-              `Sales: Rs ${Math.round(pnl.revenue).toLocaleString()}`,
-              `Gross Profit: Rs ${Math.round(pnl.grossProfit).toLocaleString()}`,
-              `Kharcha: Rs ${Math.round(pnl.totalExpenses).toLocaleString()}`,
-              `Net Profit: Rs ${Math.round(pnl.netProfit).toLocaleString()}`,
-            ].join('\n');
-            try {
-              if (navigator.share) {
-                await navigator.share({ title: 'Chaye Cafe Report', text: message });
-              } else {
-                await navigator.clipboard.writeText(message);
-                showToast('Report copy ho gayi — paste kar dein', 'success');
-              }
-            } catch { /* user cancelled share sheet */ }
-          }}
-          className="w-full bg-[var(--color-emerald-600)] text-white py-6 rounded-3xl font-bold flex items-center justify-center gap-3 shadow-xl hover:bg-[var(--color-emerald-700)] transition-all"
+          onClick={() => showToast('Report generated for sharing!', 'success')}
+          className="w-full mt-2 bg-[var(--color-emerald-600)] text-white py-6 rounded-3xl font-bold flex items-center justify-center gap-3 shadow-xl hover:bg-[var(--color-emerald-700)] transition-all"
         >
           <Share2 className="w-6 h-6" />
           Simple Share
-        </button>
-        <button
-          onClick={() => navigate('/reports/share')}
-          className="w-full border-2 border-emerald-200 text-emerald-900 py-4 rounded-3xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-50 transition-all text-sm"
-        >
-          Daily Hisab Message (WhatsApp style preview)
         </button>
       </div>
 

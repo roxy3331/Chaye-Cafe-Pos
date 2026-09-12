@@ -147,7 +147,6 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
         orderBookerPhone,
         remainingUnits: sanitizedRemaining,
         purchaseDate, // user-visible date (default today, editable)
-        createdBy: userRole, // History screen par 👑/👤 tag ke liye
         ...(expiryDate ? { expiryDate } : {}),
       });
       if (salesmanName || salesmanPhone || orderBookerName || orderBookerPhone) {
