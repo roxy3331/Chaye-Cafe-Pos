@@ -55,6 +55,15 @@ export interface ReturnEntry {
   date: any;
 }
 
+// Per-item cafe stock khata — stock/{itemId}/transactions subcollection doc
+export interface StockTransaction {
+  id: string;
+  type: 'purchase' | 'sale';   // purchase = stock aaya, sale = stock gaya
+  quantity: number;            // in pcs
+  unitPrice: number;           // per-pc buy cost (purchase) ya sell price (sale)
+  timestamp: any;              // Firestore serverTimestamp
+}
+
 export interface KhataCustomer {
   id: string;
   name: string;
@@ -117,7 +126,19 @@ export interface PubgSale {
   unitPrice: number;          // actual sell price per unit (editable — rates fluctuate)
   totalAmount: number;        // unitPrice × quantity
   unitCost: number;           // frozen weighted-avg cost at sale time
-  profit: number;             // totalAmount − unitCost × quantity (±, negative = loss)
+  profit: number;             // totalAmount − unitCost × quantity − platformFee (±, negative = loss)
+  platformFee?: number;       // marketplace/commission fee (deducted from profit)
+  saleType?: 'stock' | 'account' | 'direct-uc'; // stock = pubgItems, account = pubgAccounts, direct-uc = no stock
+  directCategory?: 'UC' | 'USDT' | 'Account' | 'Other'; // direct-sale category (saleType === 'direct-uc')
+  linkedAccountId?: string;   // pubgAccounts doc (account sales — used by refund logic)
+  refunded?: boolean;         // true = sale reversed; profit excluded from all totals
+  refundDate?: any;
+  refundReason?: string;
+  recoveryCode?: string;      // 10-digit recall code snapshot (account sales)
+  loginStatus?: 'instant' | 'pending';  // pending = login baad mein transfer hoga (7-day alert)
+  loginTransferDate?: any;    // serverTimestamp when sale marked 'pending'
+  loginEmail?: string;        // sale time par account se copy — Sold History mein PIN-locked
+  loginPassword?: string;     // sale time par account se copy — Sold History mein PIN-locked
   customerName?: string;
   playerId?: string;          // PUBG player ID / nickname
   note?: string;
@@ -125,19 +146,73 @@ export interface PubgSale {
   monthKey: string;           // 'YYYY-MM'
 }
 
+// Direct-sale categories — no stock tracking (UC / USDT / Account / Other)
+export type PubgDirectCategory = 'UC' | 'USDT' | 'Account' | 'Other';
+
+// Serial-tracked PUBG account (one doc per account — warranty + ownership trail)
+export interface PubgAccountStock {
+  id: string;
+  name: string;                     // label, e.g. 'PUBG Account Lvl 40'
+  characterId?: string;             // in-game character ID
+  boughtFrom: 'Customer' | 'Seller';
+  ownerName: string;                // original owner (re-claim / ban dispute)
+  ownerCnic?: string;               // CNIC proof of ownership
+  warrantyLink?: string;            // proof URL (Drive / screenshot) — UI mein PIN-locked
+  loginEmail?: string;              // baad mein "Edit Logins" se add hota hai (PIN-locked display)
+  loginPassword?: string;           // Add Account form mein nahi — sirf Edit Logins / sale copy
+  recoveryCode?: string;            // 10-digit recall code
+  buyingPrice: number;
+  warrantyDays: number;             // int ≥ 0 (0 = No Warranty — expiry calculate nahi hoti)
+  expiryDate: string;               // 'YYYY-MM-DD' = purchaseDate + warrantyDays ('' if 0)
+  status: 'available' | 'sold' | 'refunded';
+  saleId?: string;                  // linked pubgSale doc (refund reversal)
+  soldPrice?: number;               // frozen at sale time (refund UI)
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+// Manual profit / loss / expense outside sales (video earnings, marketing, ads)
+export interface PubgDirectEntry {
+  id: string;
+  type: 'profit' | 'loss' | 'expense'; // amount always positive; type decides sign
+  amount: number;
+  description?: string;
+  date: any;
+  monthKey: string;               // 'YYYY-MM'
+}
+
 // ============ Online Shop (Accessories) ============
 
 export type ShopPlatform = 'olx' | 'facebook' | 'whatsapp' | 'walkin' | 'other';
+
+// Step-wise stock workflow: processing → shipping (trackingId + 15-day alert) → active → sold
+export type ShopItemStatus = 'processing' | 'shipping' | 'active' | 'sold';
+
+export interface ShopItemVariant {
+  label: string;               // jaise: 'Red' / 'Red / M'
+  quantity: number;
+  sku?: string;                // variant sub-SKU (jaise: 'IPC-RD-M')
+}
 
 export interface ShopItem {
   id: string;
   name: string;
   category: string;           // emoji-prefixed: '🎧 Audio', '📱 Mobile', '🔌 Cables', '⌚ Wearables', '🎯 Gaming', '🏷️ Other'
+  sku: string;                // auto-generated short code (jaise: 'IPC-4821')
   buyPrice: number;           // weighted average cost per unit
   sellPrice: number;
   quantity: number;
   totalInvested: number;      // exact accounting
-  lowStockAt: number;         // alert threshold (default 2)
+  lowStockAt: number;         // custom low-stock alert threshold (default 2)
+  email?: string;             // customer/supplier email (legacy field)
+  orderEmail?: string;        // email jis se ye order/batch kiya gaya — Pending card se Edit hota hai
+  trackingId?: string;        // shipping tracking ID (shipping step mein add hota hai)
+  shippedAt?: any;            // timestamp when moved to shipping
+  status?: ShopItemStatus;    // legacy docs = undefined → 'active' treat hota hai
+  expiryDate?: string;        // ISO 'YYYY-MM-DD' (edibles) — 🟠 badge if ≤ 7 days
+  variants?: ShopItemVariant[];
+  vendorId?: string;          // vendors/{id} link
+  archived?: boolean;         // true = Active Stock se chhupa hua (Show Archived se dikhta hai)
   updatedAt?: any;
 }
 
@@ -150,8 +225,26 @@ export interface ShopPurchase {
   unitCost: number;
   totalCost: number;
   source?: string;            // Daraz / Alibaba / vendor
+  vendorId?: string;          // vendors/{id} link
+  orderEmail?: string;        // email jis se product order kiya (naya batch workflow — required)
+  status?: 'processing' | 'shipping' | 'active';  // batch lifecycle; legacy docs (undefined) = purchase-time merged
+  trackingId?: string;        // shipping tracking ID
+  shippedAt?: any;            // timestamp when moved to shipping
   date: any;
   monthKey: string;           // 'YYYY-MM'
+}
+
+// Email-based batch stock (v2 workflow) — shopPurchases doc with status tracking.
+// Deliver hone par quantity shopItems mein merge ho jati hai; batch history permanent rehta hai.
+export interface ShopBatch {
+  id: string;
+  productName: string;
+  orderEmail: string;                              // required — email se order kiya
+  quantity: number;
+  buyingPrice: number;                             // per-unit cost
+  status: 'processing' | 'shipping' | 'active';    // 'active' = delivered + merged
+  trackingId?: string;
+  createdAt: any;
 }
 
 export interface ShopOrder {
@@ -170,6 +263,11 @@ export interface ShopOrder {
   customerName?: string;
   customerPhone?: string;
   note?: string;
+  status?: 'delivered' | 'returned';  // return = profit 0 + stock restored
+  refunded?: boolean;
+  returnDate?: any;
+  profitBeforeReturn?: number;        // audit trail (original profit)
+  variantLabel?: string;              // agar koi specific variant becha
   date: any;
   monthKey: string;           // 'YYYY-MM'
 }

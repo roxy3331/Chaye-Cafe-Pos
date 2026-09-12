@@ -5,6 +5,7 @@ import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { Layout } from './components/Layout';
 import { ToastProvider } from './context/ToastContext';
+import { ProfitVisibilityProvider } from './context/ProfitVisibilityContext';
 import { dataService } from './services/dataService';
 
 const Dashboard    = React.lazy(() => import('./screens/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -168,31 +169,33 @@ export default function App() {
 
   return (
     <Router>
-      <ToastProvider>
-        <Layout userRole={user.role} onLogout={handleLogout}>
-          <React.Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/" element={<Dashboard userRole={user.role} />} />
-              <Route path="/purchase" element={<Purchase userRole={user.role} />} />
-              <Route path="/stock" element={<Stock userRole={user.role} />} />
-              <Route path="/reports" element={user.role === 'owner' ? <Reports /> : <Navigate to="/" />} />
-              <Route path="/reports/share" element={user.role === 'owner' ? <ShareReport /> : <Navigate to="/" />} />
-              <Route path="/expenses" element={user.role === 'owner' ? <Expenses /> : <Navigate to="/" />} />
-              <Route path="/expenses/add" element={user.role === 'owner' ? <AddExpense /> : <Navigate to="/" />} />
-              <Route path="/opening-stock" element={<OpeningStock />} />
-              <Route path="/vendors" element={<Vendors userRole={user.role} />} />
-              <Route path="/khata" element={<Khata userRole={user.role} />} />
-              <Route path="/khata/:customerId" element={<KhataDetail userRole={user.role} />} />
-              <Route path="/returns" element={<Returns userRole={user.role} />} />
-              <Route path="/pubg" element={user.role === 'owner' ? <Pubg userRole={user.role} /> : <Navigate to="/" />} />
-              <Route path="/shop" element={user.role === 'owner' ? <Shop userRole={user.role} /> : <Navigate to="/" />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/analytics" element={user.role === 'owner' ? <Reports /> : <Navigate to="/" />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </React.Suspense>
-        </Layout>
-      </ToastProvider>
+      <ProfitVisibilityProvider>
+        <ToastProvider>
+          <Layout userRole={user.role} onLogout={handleLogout}>
+            <React.Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Dashboard userRole={user.role} />} />
+                <Route path="/purchase" element={<Purchase userRole={user.role} />} />
+                <Route path="/stock" element={<Stock userRole={user.role} />} />
+                <Route path="/reports" element={user.role === 'owner' ? <Reports /> : <Navigate to="/" />} />
+                <Route path="/reports/share" element={user.role === 'owner' ? <ShareReport /> : <Navigate to="/" />} />
+                <Route path="/expenses" element={user.role === 'owner' ? <Expenses /> : <Navigate to="/" />} />
+                <Route path="/expenses/add" element={user.role === 'owner' ? <AddExpense /> : <Navigate to="/" />} />
+                <Route path="/opening-stock" element={<OpeningStock />} />
+                <Route path="/vendors" element={<Vendors userRole={user.role} />} />
+                <Route path="/khata" element={<Khata userRole={user.role} />} />
+                <Route path="/khata/:customerId" element={<KhataDetail userRole={user.role} />} />
+                <Route path="/returns" element={<Returns userRole={user.role} />} />
+                <Route path="/pubg" element={user.role === 'owner' ? <Pubg userRole={user.role} /> : <Navigate to="/" />} />
+                <Route path="/shop" element={user.role === 'owner' ? <Shop userRole={user.role} /> : <Navigate to="/" />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/analytics" element={user.role === 'owner' ? <Reports /> : <Navigate to="/" />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </React.Suspense>
+          </Layout>
+        </ToastProvider>
+      </ProfitVisibilityProvider>
     </Router>
   );
 }

@@ -11,6 +11,8 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
     }
     match /stock/{id} { allow read, update: if isSignedIn(); allow create: if isSignedIn(); allow delete: if isOwner(); }
+    // Stock khata — per-item transaction history (subcollection; bina iske addPurchase ka poora batch fail hota hai)
+    match /stock/{id}/transactions/{txId} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
     match /purchases/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
     match /openingStock/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
     match /expenses/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
@@ -35,6 +37,10 @@ service cloud.firestore {
     match /pubgPurchases/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
     // Sales: sales jaisa — read/create signed-in, update/delete owner-only
     match /pubgSales/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
+    // Accounts (serial stock + warranty): items jaisa — read/create/update signed-in, delete owner-only
+    match /pubgAccounts/{id} { allow read, create, update: if isSignedIn(); allow delete: if isOwner(); }
+    // Direct profit/loss/expense entries: read/create signed-in, update/delete owner-only
+    match /pubgDirectEntries/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
 
     // ─── ONLINE SHOP ───
     // Items: stock jaisa

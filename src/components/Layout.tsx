@@ -213,14 +213,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout }) 
         )}
       </aside>
 
-      {/* Mobile Bottom Nav */}
+      {/* Mobile Bottom Nav — 5 items: Home, Cafe Stock, Khata, PUBG, Shop */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-emerald-100 px-2 py-3 z-50 flex justify-around items-center" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
         <MobileNavLink to="/" icon={<LayoutDashboard />} label="Home" />
-        <MobileNavLink to="/purchase" icon={<ShoppingCart />} label="Purchase" />
-        <MobileNavLink to="/stock" icon={<Package />} label="Stock" />
+        <MobileNavLink to="/stock" icon={<Package />} label="Cafe" />
         <MobileNavLink to="/khata" icon={<BookOpen />} label="Khata" />
-        <MobileNavLink to="/vendors" icon={<Users />} label="Vendors" />
-        {userRole === 'owner' && <MobileNavLink to="/reports" icon={<BarChart3 />} label="Reports" />}
+        {userRole === 'owner' && <MobileNavLink to="/pubg" icon={<Gamepad2 />} label="PUBG" />}
+        {userRole === 'owner' && <MobileNavLink to="/shop" icon={<ShoppingBag />} label="Shop" />}
       </nav>
 
       {/* Main Content */}

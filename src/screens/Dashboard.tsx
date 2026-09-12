@@ -1,14 +1,31 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { TrendingUp, Wallet, Package, BarChart3, PlusCircle, ShoppingCart, Receipt, Trophy, Clock, BookOpen, CalendarClock, Gamepad2, ShoppingBag, Coffee } from 'lucide-react';
+import { TrendingUp, Wallet, Package, BarChart3, PlusCircle, ShoppingCart, Receipt, Trophy, Clock, BookOpen, CalendarClock, Gamepad2, ShoppingBag, Coffee, Eye, EyeOff } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { cn } from '../lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { dataService } from '../services/dataService';
+import { useProfitVisibility } from '../context/ProfitVisibilityContext';
 import { NumberTicker, BorderBeam, Meteors, ShimmerButton, FlipIn, ShimmerSweep } from '../components/magicui';
+
+// Munafa hide/show pill — profit figures ko '****' karta hai (localStorage-synced)
+const ProfitToggle: React.FC = () => {
+  const { isProfitHidden, toggleProfitHidden } = useProfitVisibility();
+  return (
+    <button
+      onClick={toggleProfitHidden}
+      title={isProfitHidden ? 'Munafa dikhayein' : 'Munafa chhupayein'}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/70 border border-emerald-100 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+    >
+      {isProfitHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+      {isProfitHidden ? 'Munafa Chhupa' : 'Munafa Dikha'}
+    </button>
+  );
+};
 
 export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole = 'owner' }) => {
   const navigate = useNavigate();
+  const { formatProfit } = useProfitVisibility();
   const [stats, setStats] = React.useState({
     todayActualProfit: 0,
     monthActualProfit: 0,
@@ -25,6 +42,8 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
 
   // PUBG + Online Shop profits for the owner "Business Summary" row
   const [bizStats, setBizStats] = React.useState({ pubgToday: 0, pubgMonth: 0, shopToday: 0, shopMonth: 0 });
+  // PUBG direct entries (profit − loss) — kept separate so the two subscriptions don't clobber each other
+  const [pubgDirect, setPubgDirect] = React.useState({ today: 0, month: 0 });
   // Stock context for the same row — invested paisa + item count (taake card kabhi
   // "khaali" na lage jab tak sale na ho)
   const [bizItems, setBizItems] = React.useState({ pubgInvested: 0, pubgCount: 0, shopInvested: 0, shopCount: 0 });
@@ -127,18 +146,36 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
       setKhataStats({ totalOutstanding, customersCount });
     });
 
-    // PUBG sales profit (owner Business Summary)
+    // PUBG sales profit (owner Business Summary) — UNIFIED:
+    // sales net-of-refunds + direct entries (profit − loss). Expenses tracked separately.
     const unsubPubg = dataService.subscribeToPubgSales((salesList) => {
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
       let t = 0, m = 0;
       salesList.forEach((s: any) => {
+        if (s.refunded) return; // reversed sales ∉ profit
         const d = s.date?.toDate?.(); if (!d) return;
         const p = Number(s.profit) || 0;
         if (d >= todayStart) t += p;
         if (d >= monthStart) m += p;
       });
       setBizStats(prev => ({ ...prev, pubgToday: t, pubgMonth: m }));
+    });
+
+    // PUBG direct profit/loss entries — added into the same PUBG card
+    const unsubPubgDirect = dataService.subscribeToPubgDirectEntries((entries) => {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+      let t = 0, m = 0;
+      entries.forEach((e: any) => {
+        const sign = e.type === 'profit' ? 1 : e.type === 'loss' ? -1 : 0; // expense ∉ net formula
+        if (!sign) return;
+        const d = e.date?.toDate?.(); if (!d) return;
+        const amt = sign * (Number(e.amount) || 0);
+        if (d >= todayStart) t += amt;
+        if (d >= monthStart) m += amt;
+      });
+      setPubgDirect(prev => ({ ...prev, today: t, month: m }));
     });
 
     // Online Shop orders profit (owner Business Summary)
@@ -177,6 +214,7 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
       unsubscribeSales();
       unsubKhata();
       unsubPubg();
+      unsubPubgDirect();
       unsubShop();
       unsubPubgItems();
       unsubShopItems();
@@ -224,34 +262,39 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
 
       {/* Stats Grid */}
       {userRole === 'owner' && (
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
-          {[{
-            icon: <TrendingUp className="w-4 h-4" />, label: 'Aaj Ka Profit',
-            value: stats.todayActualProfit, footer: 'Actually earned', highlight: true
-          },{
-            icon: <Receipt className="w-4 h-4" />, label: 'Is Mahine Ka',
-            value: stats.monthActualProfit, footer: 'Monthly profit', color: 'text-emerald-700'
-          },{
-            icon: <Wallet className="w-4 h-4" />, label: 'Invested',
-            value: stats.totalInvested, footer: 'Asset value'
-          },{
-            icon: <BarChart3 className="w-4 h-4" />, label: 'Lifetime Profit',
-            value: stats.lifetimeActualProfit, footer: 'All-time earned'
-          }].map((card, i) => (
-            <FlipIn key={card.label} delay={0.1 + i * 0.08}>
-              <StatCard {...card} />
-            </FlipIn>
-          ))}
+        <section className="space-y-3">
+          <div className="flex justify-end">
+            <ProfitToggle />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
+            {[{
+              icon: <TrendingUp className="w-4 h-4" />, label: 'Aaj Ka Profit',
+              value: stats.todayActualProfit, footer: 'Actually earned', highlight: true, isProfit: true
+            },{
+              icon: <Receipt className="w-4 h-4" />, label: 'Is Mahine Ka',
+              value: stats.monthActualProfit, footer: 'Monthly profit', color: 'text-emerald-700', isProfit: true
+            },{
+              icon: <Wallet className="w-4 h-4" />, label: 'Invested',
+              value: stats.totalInvested, footer: 'Asset value', isProfit: false
+            },{
+              icon: <BarChart3 className="w-4 h-4" />, label: 'Lifetime Profit',
+              value: stats.lifetimeActualProfit, footer: 'All-time earned', isProfit: true
+            }].map((card, i) => (
+              <FlipIn key={card.label} delay={0.1 + i * 0.08}>
+                <StatCard {...card} />
+              </FlipIn>
+            ))}
+          </div>
         </section>
       )}
 
       {/* Business Summary — Cafe + PUBG + Online Shop (owner only) */}
       {userRole === 'owner' && (() => {
-        const combinedToday = stats.todayActualProfit + bizStats.pubgToday + bizStats.shopToday;
-        const combinedMonth = stats.monthActualProfit + bizStats.pubgMonth + bizStats.shopMonth;
+        const combinedToday = stats.todayActualProfit + bizStats.pubgToday + pubgDirect.today + bizStats.shopToday;
+        const combinedMonth = stats.monthActualProfit + bizStats.pubgMonth + pubgDirect.month + bizStats.shopMonth;
         const bizCards = [
           { label: 'Cafe', icon: <Coffee className="w-4 h-4" />, today: stats.todayActualProfit, month: stats.monthActualProfit, to: '/reports', sub: null as string | null },
-          { label: 'PUBG', icon: <Gamepad2 className="w-4 h-4" />, today: bizStats.pubgToday, month: bizStats.pubgMonth, to: '/pubg', sub: bizItems.pubgCount > 0 ? `${bizItems.pubgCount} items · Rs ${Math.round(bizItems.pubgInvested).toLocaleString()} lagaya` : 'Abhi koi stock nahi — PUBG Hisab kholen' },
+          { label: 'PUBG', icon: <Gamepad2 className="w-4 h-4" />, today: bizStats.pubgToday + pubgDirect.today, month: bizStats.pubgMonth + pubgDirect.month, to: '/pubg', sub: bizItems.pubgCount > 0 ? `${bizItems.pubgCount} items · Rs ${Math.round(bizItems.pubgInvested).toLocaleString()} lagaya` : 'Abhi koi stock nahi — PUBG Hisab kholen' },
           { label: 'Online Shop', icon: <ShoppingBag className="w-4 h-4" />, today: bizStats.shopToday, month: bizStats.shopMonth, to: '/shop', sub: bizItems.shopCount > 0 ? `${bizItems.shopCount} products · Rs ${Math.round(bizItems.shopInvested).toLocaleString()} lagaya` : 'Abhi koi product nahi — Online Shop kholen' },
         ];
         return (
@@ -259,7 +302,10 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
             <section className="glass-card rounded-2xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-bold text-emerald-900">Business Summary</h2>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Munafa Aaj / Mahina</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Munafa Aaj / Mahina</span>
+                  <ProfitToggle />
+                </div>
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {bizCards.map(b => (
@@ -272,10 +318,10 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
                       <span className="text-slate-300 group-hover:text-emerald-600 text-xs">→</span>
                     </div>
                     <p className={cn('text-lg font-bold mt-0.5', b.today < 0 ? 'text-red-500' : 'text-emerald-900')}>
-                      Rs {Math.round(b.today).toLocaleString()}
+                      {formatProfit(b.today, true)}
                     </p>
                     <p className="text-[10px] text-slate-400 italic mt-1">
-                      Mahina: <span className={b.month < 0 ? 'text-red-500 font-bold' : 'font-bold'}>{b.month < 0 ? '−' : ''}Rs {Math.abs(Math.round(b.month)).toLocaleString()}</span>
+                      Mahina: <span className="font-bold">{formatProfit(b.month, true)}</span>
                     </p>
                     {b.sub && <p className="text-[10px] text-emerald-700/80 font-bold mt-0.5 truncate">{b.sub}</p>}
                   </button>
@@ -284,10 +330,10 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
                 <div className="p-4 bg-emerald-900 rounded-2xl text-white">
                   <p className="text-[9px] font-bold uppercase tracking-widest opacity-70">🚀 Total (Teeno)</p>
                   <p className={cn('text-lg font-bold mt-0.5', combinedToday < 0 ? 'text-red-300' : 'text-white')}>
-                    {combinedToday < 0 ? '−' : ''}Rs {Math.abs(Math.round(combinedToday)).toLocaleString()}
+                    {formatProfit(combinedToday, true)}
                   </p>
                   <p className="text-[10px] text-emerald-200/70 italic mt-1">
-                    Mahina: {combinedMonth < 0 ? '−' : ''}Rs {Math.abs(Math.round(combinedMonth)).toLocaleString()}
+                    Mahina: {formatProfit(combinedMonth, true)}
                   </p>
                 </div>
               </div>
@@ -477,7 +523,9 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
   );
 };
 
-const StatCard = ({ icon, label, value, trend, footer, highlight, color }: any) => (
+const StatCard = ({ icon, label, value, trend, footer, highlight, color, isProfit }: any) => {
+  const { formatProfit } = useProfitVisibility();
+  return (
   <ShimmerSweep delay={0.35}>
   <div className={cn(
     "glass-card p-4 md:p-5 rounded-2xl flex flex-col justify-between group",
@@ -499,7 +547,9 @@ const StatCard = ({ icon, label, value, trend, footer, highlight, color }: any) 
       </div>
       <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{label}</p>
       <h3 className={cn("text-xl md:text-2xl font-bold text-emerald-900 mt-0.5", color)}>
-        Rs <NumberTicker value={typeof value === 'number' ? value : 0} />
+        {isProfit
+          ? formatProfit(typeof value === 'number' ? value : 0, true)
+          : <>Rs <NumberTicker value={typeof value === 'number' ? value : 0} /></>}
       </h3>
     </div>
     <div className="mt-2 pt-2 border-t border-emerald-50/50">
@@ -507,7 +557,8 @@ const StatCard = ({ icon, label, value, trend, footer, highlight, color }: any) 
     </div>
   </div>
   </ShimmerSweep>
-);
+  );
+};
 
 const ActionCard = ({ icon, title, desc, dark, onClick, highlight }: any) => (
   <button

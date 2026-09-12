@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -15,9 +15,25 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 const firestoreDatabaseId = (firebaseConfigJson as any).firestoreDatabaseId;
-export const db = firestoreDatabaseId
-  ? getFirestore(app, firestoreDatabaseId)
-  : getFirestore(app);
+
+// Offline persistence — SDK caches documents locally (IndexedDB) so reads are
+// instant on repeat visits and writes queue while offline. NOTE: databaseId is
+// initializeFirestore ka THIRD argument (settings mein ignore ho jata — data
+// gayab ho jata tha). Falls back to plain getFirestore if IndexedDB unavailable.
+function createDb() {
+  try {
+    return initializeFirestore(
+      app,
+      { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) },
+      firestoreDatabaseId || undefined
+    );
+  } catch (e) {
+    console.warn('Offline persistence unavailable, falling back to getFirestore:', e);
+    return firestoreDatabaseId ? getFirestore(app, firestoreDatabaseId) : getFirestore(app);
+  }
+}
+
+export const db = createDb();
 
 export const auth = getAuth(app);
 

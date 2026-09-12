@@ -1,17 +1,20 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { TrendingUp, BarChart3, Wallet, Info, Share2, Loader2, Trophy, TrendingDown, X, Calendar, Receipt, Tag, PiggyBank, ArrowDown, ArrowUp } from 'lucide-react';
+import { TrendingUp, BarChart3, Wallet, Info, Share2, Loader2, Trophy, TrendingDown, X, Calendar, Receipt, Tag, PiggyBank, ArrowDown, ArrowUp, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { dataService } from '../services/dataService';
 import { useToast } from '../context/ToastContext';
+import { useProfitVisibility } from '../context/ProfitVisibilityContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { NumberTicker, BorderBeam, Meteors, FlipIn, ShimmerSweep } from '../components/magicui';
+import { TableWrapper } from '../components/TableWrapper';
 import { Period, PERIOD_LABELS, filterByPeriod, computePnL, getMonthKey, expensesByMonth, tsOf } from '../lib/periodUtils';
 
 const PERIODS: Period[] = ['today', 'month', 'year', 'all'];
 
 export const Reports: React.FC = () => {
   const { showToast } = useToast();
+  const { isProfitHidden, toggleProfitHidden, formatProfit } = useProfitVisibility();
   const [loading, setLoading] = React.useState(true);
   const [period, setPeriod] = React.useState<Period>('all');
   const [showTopSellers, setShowTopSellers] = React.useState(false);
@@ -249,20 +252,30 @@ export const Reports: React.FC = () => {
       <header className="space-y-4">
         <h1 className="text-4xl font-bold text-emerald-900">Reports & Analytics</h1>
 
-        {/* Time period tabs — saare metrics is period ke hisaab se */}
-        <div className="flex gap-2 bg-emerald-50/60 p-1.5 rounded-2xl w-fit max-w-full overflow-x-auto">
-          {PERIODS.map(p => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={cn(
-                "px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap",
-                period === p ? "bg-emerald-900 text-white shadow-lg" : "text-emerald-900/60 hover:bg-emerald-100"
-              )}
-            >
-              {PERIOD_LABELS[p]}
-            </button>
-          ))}
+        {/* Time period tabs + munafa hide/show — saare metrics is period ke hisaab se */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-2 bg-emerald-50/60 p-1.5 rounded-2xl w-fit max-w-full overflow-x-auto">
+            {PERIODS.map(p => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={cn(
+                  "px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap",
+                  period === p ? "bg-emerald-900 text-white shadow-lg" : "text-emerald-900/60 hover:bg-emerald-100"
+                )}
+              >
+                {PERIOD_LABELS[p]}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={toggleProfitHidden}
+            title={isProfitHidden ? 'Munafa dikhayein' : 'Munafa chhupayein'}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/70 border border-emerald-100 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+          >
+            {isProfitHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            {isProfitHidden ? 'Munafa Chhupa' : 'Munafa Dikha'}
+          </button>
         </div>
       </header>
 
@@ -275,10 +288,10 @@ export const Reports: React.FC = () => {
             <div className="relative z-10">
               <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mb-1">NET PROFIT — {PERIOD_LABELS[period]}</p>
               <p className={cn("text-6xl font-bold", pnl.netProfit < 0 && "text-red-300")}>
-                <NumberTicker value={pnl.netProfit} />
+                {formatProfit(pnl.netProfit, true)}
               </p>
               <p className="text-[11px] font-bold opacity-70 mt-2">
-                Gross: Rs {Math.round(pnl.grossProfit).toLocaleString()} · Kharcha: Rs {Math.round(pnl.totalExpenses).toLocaleString()}
+                Gross: {formatProfit(pnl.grossProfit, true)} · Kharcha: Rs {Math.round(pnl.totalExpenses).toLocaleString()}
               </p>
             </div>
             <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center text-white shadow-sm backdrop-blur-md relative z-10">
@@ -291,7 +304,7 @@ export const Reports: React.FC = () => {
           <div className="glass-card p-8 rounded-3xl flex justify-between items-center bg-emerald-50">
             <div>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Potential Profit (Unsold Stock)</p>
-              <p className="text-5xl font-bold text-emerald-600">+<NumberTicker value={stockStats.potentialProfit} /></p>
+              <p className="text-5xl font-bold text-emerald-600">{formatProfit(stockStats.potentialProfit, true)}</p>
             </div>
             <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-emerald-100">
               <BarChart3 className="w-7 h-7" />
@@ -328,9 +341,9 @@ export const Reports: React.FC = () => {
         <div className="space-y-1">
           <PnlRow label="Total Revenue (Sale)" value={pnl.revenue} tone="plain" />
           <PnlRow label="− Cost of Goods (Maal ka cost)" value={-pnl.cogs} tone="minus" />
-          <PnlRow label="= Gross Profit (Chhala maal kamane wala)" value={pnl.grossProfit} tone="sub" />
+          <PnlRow label="= Gross Profit (Chhala maal kamane wala)" value={pnl.grossProfit} tone="sub" isProfit />
           <PnlRow label="− Total Kharcha (Expenses)" value={-pnl.totalExpenses} tone="minus" />
-          <PnlRow label="= NET PROFIT (Asli munafa)" value={pnl.netProfit} tone="total" />
+          <PnlRow label="= NET PROFIT (Asli munafa)" value={pnl.netProfit} tone="total" isProfit />
         </div>
 
         <div className="grid grid-cols-3 gap-3 pt-2">
@@ -419,11 +432,11 @@ export const Reports: React.FC = () => {
                 <div key={m.monthKey} className="flex items-center justify-between p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/50 gap-3">
                   <div className="min-w-0">
                     <p className="font-bold text-emerald-900 text-sm truncate">{m.label}</p>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Gross: {Math.round(m.gross).toLocaleString()} · Kharcha: {Math.round(m.expenses).toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Gross: {formatProfit(m.gross, true)} · Kharcha: {Math.round(m.expenses).toLocaleString()}</p>
                   </div>
                   <div className="text-right shrink-0">
                     <p className={cn("text-xl font-bold", m.net >= 0 ? "text-emerald-600" : "text-red-500")}>
-                      {m.net >= 0 ? '+' : ''}{Math.round(m.net).toLocaleString()}
+                      {formatProfit(m.net, true)}
                     </p>
                     <p className="text-[10px] text-slate-400">NET · PKR</p>
                   </div>
@@ -503,9 +516,9 @@ export const Reports: React.FC = () => {
             </ResponsiveContainer>
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto -mx-2">
-            <table className="w-full text-sm min-w-[480px]">
+          {/* Table — TableWrapper se mobile/PC par left-right scroll */}
+          <TableWrapper className="-mx-2">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-emerald-50">
                   <th className="text-left pb-3 px-2">Category</th>
@@ -530,7 +543,7 @@ export const Reports: React.FC = () => {
                     <td className="py-3 px-2 text-right text-slate-600 font-medium">{row.units}</td>
                     <td className="py-3 px-2 text-right font-bold text-slate-700">Rs {row.revenue.toLocaleString()}</td>
                     <td className={cn("py-3 px-2 text-right font-bold", row.profit >= 0 ? "text-emerald-600" : "text-red-500")}>
-                      {row.profit >= 0 ? '+' : ''}{row.profit.toLocaleString()}
+                      {formatProfit(row.profit, true)}
                     </td>
                     <td className="py-3 px-2 text-right">
                       <span className={cn(
@@ -546,7 +559,7 @@ export const Reports: React.FC = () => {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableWrapper>
         </section>
       )}
 
@@ -704,7 +717,7 @@ export const Reports: React.FC = () => {
                                 </div>
                                 <div className="text-right">
                                   <span className="text-xs font-bold text-emerald-700">{item.units} units</span>
-                                  <span className="text-xs text-slate-400 ml-2">Rs. {item.profit.toFixed(0)}</span>
+                                  <span className="text-xs text-slate-400 ml-2">{formatProfit(item.profit, true)}</span>
                                 </div>
                               </div>
                               <div className="h-1.5 w-full bg-white rounded-full overflow-hidden">
@@ -781,8 +794,9 @@ const RankItem = ({ label, value, total, color, isMoney }: any) => {
   );
 };
 
-// P&L statement row — accounting style (label, value, tone)
-const PnlRow = ({ label, value, tone }: { label: string; value: number; tone: 'plain' | 'minus' | 'sub' | 'total' }) => {
+// P&L statement row — accounting style (label, value, tone). isProfit rows '****' ho jate hain jab munafa chhupa ho.
+const PnlRow = ({ label, value, tone, isProfit }: { label: string; value: number; tone: 'plain' | 'minus' | 'sub' | 'total'; isProfit?: boolean }) => {
+  const { formatProfit } = useProfitVisibility();
   const isNegative = value < 0;
   return (
     <div className={cn(
@@ -804,7 +818,7 @@ const PnlRow = ({ label, value, tone }: { label: string; value: number; tone: 'p
         "font-bold",
         tone === 'total' ? (isNegative ? "text-red-300 text-xl" : "text-white text-xl") : cn("text-lg", isNegative ? "text-red-500" : "text-emerald-900")
       )}>
-        Rs {Math.round(Math.abs(value)).toLocaleString()}{isNegative ? ' −' : ''}
+        {isProfit ? formatProfit(value, true) : <>Rs {Math.round(Math.abs(value)).toLocaleString()}{isNegative ? ' −' : ''}</>}
       </span>
     </div>
   );

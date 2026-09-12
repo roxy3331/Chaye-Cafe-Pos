@@ -1,11 +1,12 @@
 import React from 'react';
-import { Package, TrendingUp, Wallet, Search, Plus, X, Trash2, Edit2, Loader2, Save, RotateCcw, CalendarClock, ArrowLeft } from 'lucide-react';
+import { Package, TrendingUp, Wallet, Search, Plus, X, Trash2, Edit2, Loader2, Save, RotateCcw, CalendarClock, ArrowLeft, History as HistoryIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import { StockItem } from '../types';
+import { StockItem, StockTransaction } from '../types';
 import { dataService } from '../services/dataService';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
+import { useProfitVisibility } from '../context/ProfitVisibilityContext';
 import { NumberTicker, FlipIn, ShimmerSweep } from '../components/magicui';
 import { searchList } from '../lib/search';
 
@@ -27,6 +28,7 @@ function formatExpiryDate(d: string) {
 export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole = 'owner' }) => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { formatProfit } = useProfitVisibility();
   const [showModal, setShowModal] = React.useState(false);
   const [selectedItem, setSelectedItem] = React.useState<StockItem | null>(null);
   const [items, setItems] = React.useState<any[]>([]);
@@ -43,7 +45,6 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
   const [editCategory, setEditCategory] = React.useState('');
   const [editPcsPerPack, setEditPcsPerPack] = React.useState('');
   const [editStock, setEditStock] = React.useState('');
-  const [editSaving, setEditSaving] = React.useState(false);
 
   // Return modal state
   const [showReturnModal, setShowReturnModal] = React.useState(false);
@@ -51,8 +52,22 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
   const [returnType, setReturnType] = React.useState<'customer_return' | 'supplier_return'>('customer_return');
   const [returnQty, setReturnQty] = React.useState('');
   const [returnReason, setReturnReason] = React.useState('');
-  const [returnSaving, setReturnSaving] = React.useState(false);
   const [deleteConfirm, setDeleteConfirm] = React.useState<{ id: string; name: string } | null>(null);
+
+  // Stock khata (transaction history) — modal open = live subscription
+  const [historyItem, setHistoryItem] = React.useState<any | null>(null);
+  const [historyTxns, setHistoryTxns] = React.useState<StockTransaction[]>([]);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!historyItem) return;
+    setHistoryLoading(true);
+    const unsub = dataService.subscribeToStockTransactions(historyItem.id, (txns) => {
+      setHistoryTxns(txns as StockTransaction[]);
+      setHistoryLoading(false);
+    });
+    return () => { unsub(); setHistoryTxns([]); };
+  }, [historyItem]);
 
   React.useEffect(() => {
     let timeout: any;
@@ -73,12 +88,13 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
     };
   }, []);
 
-  const handleCloseBatch = (item: StockItem) => {
+  // Stable item-taking callbacks so React.memo'd StockCards don't re-render on parent state churn
+  const handleCloseBatch = React.useCallback((item: any) => {
     setSelectedItem(item);
     setShowModal(true);
-  };
+  }, []);
 
-  const handleEdit = (item: any) => {
+  const handleEdit = React.useCallback((item: any) => {
     setEditItem(item);
     setEditName(item.name || '');
     setEditBuyPrice(item.averageBuy?.toString() || '');
@@ -87,32 +103,51 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
     setEditPcsPerPack(item.pcsPerPack?.toString() || '1');
     setEditStock(item.stock?.toString() || '0');
     setShowEditModal(true);
-  };
+  }, []);
 
-  const handleSaveEdit = async () => {
+  const handleDelete = React.useCallback((item: any) => {
+    if (userRole !== 'owner') return;
+    setDeleteConfirm({ id: item.id, name: item.name });
+  }, [userRole]);
+
+  const handleOpenReturn = React.useCallback((item: any) => {
+    setReturnItem(item);
+    setReturnType('customer_return');
+    setReturnQty('');
+    setReturnReason('');
+    setShowReturnModal(true);
+  }, []);
+
+  const openHistory = React.useCallback((item: any) => {
+    setHistoryItem(item);
+  }, []);
+
+  // Optimistic — modal turant band + toast, Firestore background mein sync
+  const handleSaveEdit = () => {
     if (!editItem || !editName.trim()) {
       showToast('Item name required', 'warning');
       return;
     }
-    setEditSaving(true);
-    try {
-      const newAverageBuy = parseFloat(editBuyPrice) || 0;
-      const newCurrentSell = parseFloat(editSellPrice) || 0;
-      const newPcsPerPack = parseInt(editPcsPerPack) || 1;
-      const newStock = editStock !== '' ? (parseInt(editStock) || 0) : (editItem.stock || 0);
-      const oldStock = editItem.stock || 0;
+    const newAverageBuy = parseFloat(editBuyPrice) || 0;
+    const newCurrentSell = parseFloat(editSellPrice) || 0;
+    const newPcsPerPack = parseInt(editPcsPerPack) || 1;
+    const newStock = editStock !== '' ? (parseInt(editStock) || 0) : (editItem.stock || 0);
+    const oldStock = editItem.stock || 0;
 
-      const updates: any = {
-        name: editName.trim(),
-        averageBuy: newAverageBuy,
-        currentSell: newCurrentSell,
-        category: editCategory.trim() || 'General',
-        pcsPerPack: newPcsPerPack,
-      };
+    const updates: any = {
+      name: editName.trim(),
+      averageBuy: newAverageBuy,
+      currentSell: newCurrentSell,
+      category: editCategory.trim() || 'General',
+      pcsPerPack: newPcsPerPack,
+    };
 
+    setShowEditModal(false);
+    showToast('Item updated!', 'success');
+
+    (async () => {
       // If stock decreased, record a sale for the difference so profit is counted
-      // (same as Close Batch). Use the just-edited prices since they reflect current pricing.
-      // recordStockReduction handles the stock update atomically with the sale.
+      // (same as Close Batch). recordStockReduction updates stock atomically with the sale.
       if (editStock !== '' && newStock < oldStock) {
         await dataService.recordStockReduction({
           id: editItem.id,
@@ -129,67 +164,54 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
         if (editStock !== '') updates.stock = newStock;
         await dataService.updateStock(editItem.id, updates);
       }
-
-      showToast('Item updated!', 'success');
-      setShowEditModal(false);
-    } catch (e) {
-      showToast('Update failed', 'error');
-    } finally {
-      setEditSaving(false);
-    }
+    })().catch(() => showToast('Update failed — dobara try karein', 'error'));
   };
 
-  const handleDelete = (id: string, itemName: string) => {
-    if (userRole !== 'owner') {
-      showToast('Only owners can delete stock items.', 'warning');
-      return;
-    }
-    setDeleteConfirm({ id, name: itemName });
-  };
-
-  const confirmDelete = async () => {
+  const confirmDelete = () => {
     if (!deleteConfirm) return;
-    try {
-      await dataService.deleteStock(deleteConfirm.id);
-      await dataService.addStockAlert({ alertType: 'stock_delete', itemName: deleteConfirm.name, performedBy: userRole });
-      showToast('Item deleted', 'success');
-      setDeleteConfirm(null);
-    } catch {
-      showToast('Delete failed', 'error');
-    }
+    const target = deleteConfirm;
+    setDeleteConfirm(null);
+    showToast('Item deleted', 'success');
+    (async () => {
+      await dataService.deleteStock(target.id);
+      await dataService.addStockAlert({ alertType: 'stock_delete', itemName: target.name, performedBy: userRole });
+    })().catch(() => showToast('Delete failed — dobara try karein', 'error'));
   };
 
-  const handleOpenReturn = (item: any) => {
-    setReturnItem(item);
-    setReturnType('customer_return');
-    setReturnQty('');
-    setReturnReason('');
-    setShowReturnModal(true);
-  };
-
-  const handleSubmitReturn = async () => {
+  const handleSubmitReturn = () => {
     const qty = parseInt(returnQty);
     if (!qty || qty <= 0) { showToast('Quantity sahi likhein', 'warning'); return; }
     if (!returnItem) return;
-    setReturnSaving(true);
-    try {
-      await dataService.addReturn({
-        itemName: returnItem.name,
-        category: returnItem.category || 'General',
-        returnType,
-        quantity: qty,
-        pcsPerPack: returnItem.pcsPerPack || 1,
-        buyPrice: returnItem.averageBuy || 0,
-        sellPrice: returnItem.currentSell || 0,
-        reason: returnReason.trim() || undefined,
+    const target = returnItem;
+    setShowReturnModal(false);
+    showToast('Return record ho gaya ✅', 'success');
+    dataService.addReturn({
+      itemName: target.name,
+      category: target.category || 'General',
+      returnType,
+      quantity: qty,
+      pcsPerPack: target.pcsPerPack || 1,
+      buyPrice: target.averageBuy || 0,
+      sellPrice: target.currentSell || 0,
+      reason: returnReason.trim() || undefined,
+    }).catch(() => showToast('Return save nahi hua, dobara try karein', 'error'));
+  };
+
+  // Set to Zero — optimistic: modal band + toast, sale + alert background mein
+  const handleSetZero = () => {
+    if (!selectedItem) return;
+    const target = selectedItem;
+    setShowModal(false);
+    showToast('Stock set to zero', 'success');
+    (async () => {
+      await dataService.recordStockReduction(target, 0);
+      await dataService.addStockAlert({
+        alertType: 'stock_zero',
+        itemName: target.name,
+        previousStock: target.stock,
+        performedBy: userRole,
       });
-      showToast(`Return record ho gaya ✅`, 'success');
-      setShowReturnModal(false);
-    } catch {
-      showToast('Return save nahi hua, dobara try karein', 'error');
-    } finally {
-      setReturnSaving(false);
-    }
+    })().catch(() => showToast('Update failed — dobara try karein', 'error'));
   };
 
   const filteredItems = React.useMemo(() =>
@@ -260,18 +282,20 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
       {userRole === 'owner' && (
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           {[{
-            label: 'Total Assets', value: totalAssets, icon: <Wallet className="w-6 h-6" />, prefix: '', color: 'text-emerald-900'
+            label: 'Total Assets', value: totalAssets, icon: <Wallet className="w-6 h-6" />, prefix: '', color: 'text-emerald-900', isProfit: false
           },{
-            label: 'Items in Stock', value: totalStockItems, icon: <Package className="w-6 h-6" />, prefix: '', color: 'text-emerald-900'
+            label: 'Items in Stock', value: totalStockItems, icon: <Package className="w-6 h-6" />, prefix: '', color: 'text-emerald-900', isProfit: false
           },{
-            label: 'Potential Profit', value: potentialProfit, icon: <TrendingUp className="w-6 h-6" />, prefix: '+', color: 'text-emerald-500'
+            label: 'Potential Profit', value: potentialProfit, icon: <TrendingUp className="w-6 h-6" />, prefix: '+', color: 'text-emerald-500', isProfit: true
           }].map((s, i) => (
             <FlipIn key={s.label} delay={i * 0.08}>
               <ShimmerSweep delay={0.3 + i * 0.1}>
                 <div className="glass-card p-6 rounded-3xl flex justify-between items-center">
                   <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{s.label}</p>
-                    <p className={`text-3xl font-bold ${s.color}`}>{s.prefix}<NumberTicker value={s.value} /></p>
+                    <p className={`text-3xl font-bold ${s.color}`}>
+                      {s.isProfit ? formatProfit(s.value, true) : <>{s.prefix}<NumberTicker value={s.value} /></>}
+                    </p>
                   </div>
                   <div className={`w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center ${s.color}`}>
                     {s.icon}
@@ -337,10 +361,11 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
                       key={item.id}
                       item={item}
                       userRole={userRole}
-                      onCloseBatch={() => handleCloseBatch(item)}
-                      onDelete={() => handleDelete(item.id, item.name)}
-                      onEdit={() => handleEdit(item)}
-                      onReturn={() => handleOpenReturn(item)}
+                      onCloseBatch={handleCloseBatch}
+                      onDelete={handleDelete}
+                      onEdit={handleEdit}
+                      onReturn={handleOpenReturn}
+                      onHistory={openHistory}
                     />
                   ))}
                 </div>
@@ -370,10 +395,11 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
                     key={item.id}
                     item={item}
                     userRole={userRole}
-                    onCloseBatch={() => handleCloseBatch(item)}
-                    onDelete={() => handleDelete(item.id, item.name)}
-                    onEdit={() => handleEdit(item)}
-                    onReturn={() => handleOpenReturn(item)}
+                    onCloseBatch={handleCloseBatch}
+                    onDelete={handleDelete}
+                    onEdit={handleEdit}
+                    onReturn={handleOpenReturn}
+                    onHistory={openHistory}
                   />
                 ))}
               </div>
@@ -435,31 +461,14 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <button 
+                  <button
                     onClick={() => setShowModal(false)}
                     className="py-5 border border-emerald-100 text-emerald-900 rounded-2xl font-bold hover:bg-emerald-50 transition-all"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={async () => {
-                      const prevStock = selectedItem.stock;
-                      try {
-                        // Record a sale for the sold-out stock so profit is actually counted
-                        // (previously this only zeroed the count and lost the profit).
-                        await dataService.recordStockReduction(selectedItem, 0);
-                        await dataService.addStockAlert({
-                          alertType: 'stock_zero',
-                          itemName: selectedItem.name,
-                          previousStock: prevStock,
-                          performedBy: userRole,
-                        });
-                        showToast('Stock set to zero', 'success');
-                        setShowModal(false);
-                      } catch {
-                        showToast('Update failed', 'error');
-                      }
-                    }}
+                    onClick={handleSetZero}
                     className="py-5 bg-red-600 text-white rounded-2xl font-bold shadow-xl shadow-red-900/20 active:scale-95 transition-all"
                   >
                     Set to Zero
@@ -587,10 +596,9 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
 
               <button
                 onClick={handleSaveEdit}
-                disabled={editSaving}
-                className="w-full bg-emerald-900 text-white py-5 rounded-2xl font-bold flex items-center justify-center gap-3 active:scale-95 transition-all shadow-xl disabled:opacity-50"
+                className="w-full bg-emerald-900 text-white py-5 rounded-2xl font-bold flex items-center justify-center gap-3 active:scale-95 transition-all shadow-xl"
               >
-                {editSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                <Save className="w-5 h-5" />
                 Save Changes
               </button>
             </motion.div>
@@ -692,11 +700,11 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
 
                 <button
                   onClick={handleSubmitReturn}
-                  disabled={returnSaving || !returnQty}
+                  disabled={!returnQty}
                   className="w-full mt-6 py-4 bg-orange-500 text-white rounded-2xl font-bold text-sm hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
                 >
-                  {returnSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-                  {returnSaving ? 'Record ho raha hai...' : 'Return Record Karo'}
+                  <RotateCcw className="w-4 h-4" />
+                  Return Record Karo
                 </button>
               </div>
             </motion.div>
@@ -748,11 +756,99 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
           </>
         )}
       </AnimatePresence>
+      {/* ── Stock Khata (Transaction History) Modal ── */}
+      <AnimatePresence>
+        {historyItem && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-emerald-950/30 backdrop-blur-sm z-[80]"
+              onClick={() => setHistoryItem(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 40, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.97 }}
+              className="fixed bottom-0 left-0 right-0 md:inset-0 md:flex md:items-center md:justify-center z-[90] pointer-events-none"
+            >
+              <div className="pointer-events-auto bg-white rounded-t-[32px] md:rounded-[32px] p-7 w-full md:max-w-md shadow-2xl max-h-[85vh] flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-5 shrink-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center shrink-0">
+                      <HistoryIcon className="w-5 h-5 text-emerald-700" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-bold text-emerald-900 truncate">Stock Khata</h3>
+                      <p className="text-xs text-slate-400 font-medium truncate">{historyItem.name}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setHistoryItem(null)} className="p-2 rounded-xl hover:bg-emerald-50 text-slate-400 shrink-0">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Transactions list — live subscription */}
+                <div className="overflow-y-auto space-y-2 flex-1 pr-1">
+                  {historyLoading ? (
+                    <div className="py-10 flex flex-col items-center gap-3 text-emerald-900/40">
+                      <Loader2 className="w-8 h-8 animate-spin" />
+                      <p className="text-[10px] font-bold uppercase tracking-widest">Khata load ho rahi hai...</p>
+                    </div>
+                  ) : historyTxns.length === 0 ? (
+                    <div className="py-10 text-center">
+                      <p className="text-3xl mb-2">📒</p>
+                      <p className="text-slate-400 font-bold text-sm">Abhi koi khata entry nahi</p>
+                      <p className="text-slate-400 text-xs mt-1">Nayi kharidari ya sale ke baad yahan dikhega</p>
+                    </div>
+                  ) : historyTxns.map(t => {
+                    const d = t.timestamp?.toDate?.();
+                    const isPurchase = t.type === 'purchase';
+                    return (
+                      <div key={t.id} className={cn('flex items-center gap-3 p-3 rounded-2xl border',
+                        isPurchase ? 'bg-emerald-50/50 border-emerald-100/60' : 'bg-amber-50/50 border-amber-100/60')}>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={cn('px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest',
+                              isPurchase ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')}>
+                              {isPurchase ? '🛒 Kharida' : '💰 Sale'}
+                            </span>
+                            <span className="text-xs font-bold text-slate-600">{Number(t.quantity) || 0} pcs</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-0.5">
+                            {d ? d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
+                          </p>
+                        </div>
+                        <p className="text-sm font-black text-emerald-900 shrink-0">
+                          Rs {(Math.round((Number(t.unitPrice) || 0)) || 0).toLocaleString()}
+                          <span className="text-[9px] text-slate-400 font-bold block text-right">per pc</span>
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
-const StockCard: React.FC<{ item: any; userRole: string; onCloseBatch: () => void; onDelete: () => void; onEdit: () => void; onReturn: () => void }> = ({ item, userRole, onCloseBatch, onDelete, onEdit, onReturn }) => (
+// Memoized so typing in search / unrelated state changes don't re-render every card.
+// Callbacks are item-taking (stable via useCallback in parent) so props stay identical.
+const StockCard: React.FC<{
+  item: any;
+  userRole: string;
+  onCloseBatch: (item: any) => void;
+  onDelete: (item: any) => void;
+  onEdit: (item: any) => void;
+  onReturn: (item: any) => void;
+  onHistory: (item: any) => void;
+}> = React.memo(({ item, userRole, onCloseBatch, onDelete, onEdit, onReturn, onHistory }) => {
+  const { formatProfit } = useProfitVisibility();
+  return (
   <motion.div 
     whileHover={{ y: -5 }}
     className="glass-card rounded-[32px] p-8 space-y-6 group hover:shadow-2xl transition-all duration-300"
@@ -820,7 +916,15 @@ const StockCard: React.FC<{ item: any; userRole: string; onCloseBatch: () => voi
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onReturn(); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onHistory(item); }}
+              className="p-3 bg-slate-100 text-slate-600 hover:text-white hover:bg-slate-600 rounded-xl transition-all shadow-sm flex items-center justify-center"
+              title="Stock khata (history)"
+            >
+              <HistoryIcon className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onReturn(item); }}
               className="p-3 bg-orange-50 text-orange-600 hover:text-white hover:bg-orange-500 rounded-xl transition-all shadow-sm flex items-center justify-center"
               title="Return entry"
             >
@@ -828,7 +932,7 @@ const StockCard: React.FC<{ item: any; userRole: string; onCloseBatch: () => voi
             </button>
             <button
               type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(item); }}
               className="p-3 bg-emerald-50 text-emerald-700 hover:text-white hover:bg-emerald-700 rounded-xl transition-all shadow-sm flex items-center justify-center"
               title="Edit item"
             >
@@ -836,7 +940,7 @@ const StockCard: React.FC<{ item: any; userRole: string; onCloseBatch: () => voi
             </button>
             <button
               type="button"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item); }}
               className="p-3 bg-red-100/50 text-red-500 hover:text-white hover:bg-red-600 rounded-xl transition-all shadow-sm flex items-center justify-center"
               title="Delete permanently"
             >
@@ -867,13 +971,15 @@ const StockCard: React.FC<{ item: any; userRole: string; onCloseBatch: () => voi
       {userRole === 'owner' && (
         <div className="flex justify-between items-center">
           <span className="text-sm font-medium text-slate-500 italic">Est. Profit</span>
-          <span className="font-bold text-emerald-500">+{((item.stock / (item.pcsPerPack || 1)) * ((item.currentSell || 0) - (item.averageBuy || 0))).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          <span className="font-bold text-emerald-500">
+            {formatProfit((item.stock / (item.pcsPerPack || 1)) * ((item.currentSell || 0) - (item.averageBuy || 0)), true)}
+          </span>
         </div>
       )}
     </div>
 
-    <button 
-      onClick={onCloseBatch}
+    <button
+      onClick={() => onCloseBatch(item)}
       className={cn(
         "w-full py-4 border font-bold rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95",
         item.stock === 0 
@@ -886,6 +992,7 @@ const StockCard: React.FC<{ item: any; userRole: string; onCloseBatch: () => voi
       Close Batch
     </button>
   </motion.div>
-);
+  );
+});
 
 
