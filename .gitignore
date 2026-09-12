@@ -55,3 +55,4 @@ autoresearch/
 
 # Firebase CLI cache
 .firebase/
+*.tsbuildinfo
