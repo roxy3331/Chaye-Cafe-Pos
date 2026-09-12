@@ -202,6 +202,18 @@ export const dataService = {
     }
   },
 
+  // Purchase history (newest first) for the History screen.
+  // NOTE: the `purchases` collection also holds stock-delete/zero ALERT docs
+  // (alertType field) — callers must filter those out.
+  subscribeToPurchases(callback: (data: any[]) => void) {
+    const q = query(collection(db, 'purchases'), orderBy('date', 'desc'));
+    return onSnapshot(q, (snap) => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (e) => {
+      handleFirestoreError(e, OperationType.LIST, 'purchases');
+    });
+  },
+
   async addOpeningStock(data: any) {
     try {
       await addDoc(collection(db, 'openingStock'), {
@@ -283,6 +295,27 @@ export const dataService = {
       await addDoc(collection(db, 'vendors'), vendor);
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, 'vendors');
+    }
+  },
+
+  async updateVendor(id: string, vendor: Record<string, any>) {
+    try {
+      // Strip undefined fields so optional blanks clear via deleteField instead
+      const updates: Record<string, any> = {};
+      Object.entries(vendor).forEach(([k, v]) => {
+        updates[k] = (v === undefined || v === '') ? deleteField() : v;
+      });
+      await updateDoc(doc(db, 'vendors', id), updates);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `vendors/${id}`);
+    }
+  },
+
+  async deleteVendor(id: string) {
+    try {
+      await deleteDoc(doc(db, 'vendors', id));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `vendors/${id}`);
     }
   },
 
@@ -612,6 +645,7 @@ export const dataService = {
     amount: number;
     note?: string;
     dueDate?: string;
+    createdBy?: 'owner' | 'employee';
   }) {
     try {
       const amount = Number(tx.amount);
@@ -660,6 +694,7 @@ export const dataService = {
     previousAmount: number;
     nextAmount: number;
     note?: string;
+    updatedBy?: 'owner' | 'employee';
   }) {
     try {
       const batch = writeBatch(db);
@@ -668,6 +703,7 @@ export const dataService = {
         amount: params.nextAmount,
         updatedAt: serverTimestamp(),
       };
+      if (params.updatedBy) updates.updatedBy = params.updatedBy;
       // Only touch the note when caller explicitly passed something:
       //   - a non-empty string → overwrite
       //   - an empty string    → explicit clear (delete)

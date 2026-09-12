@@ -236,6 +236,7 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         type: txType,
         amount,
         note: txNote.trim() || '',
+        createdBy: userRole as 'owner' | 'employee',
         ...(txDueDate ? { dueDate: txDueDate } : {}),
       });
       showToast(txType === 'credit' ? `Rs ${amount.toLocaleString()} udhar add ✅` : `Rs ${amount.toLocaleString()} payment record ✅`, 'success');
@@ -585,14 +586,12 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
             </p>
           )}
         </div>
-        {userRole === 'owner' && (
-          <button
-            onClick={() => { setEditName(customer.name); setEditPhone(customer.phone || ''); setEditNote(customer.note || ''); setEditCreditLimit(customer.creditLimit ? String(customer.creditLimit) : ''); setEditTrustBadge((customer.trustBadge as any) || ''); setShowEditModal(true); }}
-            className="p-2 rounded-xl hover:bg-emerald-50 text-slate-400 hover:text-emerald-900"
-          >
-            <Edit2 className="w-4 h-4" />
-          </button>
-        )}
+        <button
+          onClick={() => { setEditName(customer.name); setEditPhone(customer.phone || ''); setEditNote(customer.note || ''); setEditCreditLimit(customer.creditLimit ? String(customer.creditLimit) : ''); setEditTrustBadge((customer.trustBadge as any) || ''); setShowEditModal(true); }}
+          className="p-2 rounded-xl hover:bg-emerald-50 text-slate-400 hover:text-emerald-900"
+        >
+          <Edit2 className="w-4 h-4" />
+        </button>
       </div>
 
       {/* â”€â”€ Balance Hero Card (DigiKhata style) â”€â”€ */}
@@ -619,13 +618,8 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         <p className="text-xs opacity-50 mt-3">{transactions.length} entries total</p>
       </div>
 
-      {/* â”€â”€ Action Buttons row â”€â”€ */}
-      <div
-        className={cn(
-          'grid gap-2 mb-5',
-          userRole === 'owner' ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3'
-        )}
-      >
+      {/* ─── Action Buttons row ─── */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-5">
         <button onClick={() => handleWhatsAppShare('customer')} className="flex flex-col items-center gap-1 py-2.5 bg-white border border-emerald-100 rounded-2xl hover:bg-green-50 transition-colors">
           <MessageCircle className="w-5 h-5 text-green-600" />
           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Customer</span>
@@ -653,30 +647,26 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
             </button>
           );
         })()}
-        {userRole === 'owner' && (
-          <button
-            onClick={() => { setEditName(customer.name); setEditPhone(customer.phone || ''); setEditNote(customer.note || ''); setEditCreditLimit(customer.creditLimit ? String(customer.creditLimit) : ''); setEditTrustBadge((customer.trustBadge as any) || ''); setShowEditModal(true); }}
-            className="flex flex-col items-center gap-1 py-2.5 bg-white border border-emerald-100 rounded-2xl hover:bg-emerald-50 transition-colors"
-          >
-            <Edit2 className="w-5 h-5 text-emerald-700" />
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Edit</span>
-          </button>
-        )}
-        {userRole === 'owner' && (
-          <button
-            onClick={handleTogglePin}
-            disabled={pinning}
-            className={cn(
-              'flex flex-col items-center gap-1 py-2.5 border rounded-2xl transition-colors',
-              customer.pinned
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                : 'bg-white border-emerald-100 hover:bg-emerald-50 text-slate-400 hover:text-emerald-700'
-            )}
-          >
-            {customer.pinned ? <PinOff className="w-5 h-5" /> : <Pin className="w-5 h-5" />}
-            <span className="text-[9px] font-bold uppercase tracking-wide">{customer.pinned ? 'Unpin' : 'Pin'}</span>
-          </button>
-        )}
+        <button
+          onClick={() => { setEditName(customer.name); setEditPhone(customer.phone || ''); setEditNote(customer.note || ''); setEditCreditLimit(customer.creditLimit ? String(customer.creditLimit) : ''); setEditTrustBadge((customer.trustBadge as any) || ''); setShowEditModal(true); }}
+          className="flex flex-col items-center gap-1 py-2.5 bg-white border border-emerald-100 rounded-2xl hover:bg-emerald-50 transition-colors"
+        >
+          <Edit2 className="w-5 h-5 text-emerald-700" />
+          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Edit</span>
+        </button>
+        <button
+          onClick={handleTogglePin}
+          disabled={pinning}
+          className={cn(
+            'flex flex-col items-center gap-1 py-2.5 border rounded-2xl transition-colors',
+            customer.pinned
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              : 'bg-white border-emerald-100 hover:bg-emerald-50 text-slate-400 hover:text-emerald-700'
+          )}
+        >
+          {customer.pinned ? <PinOff className="w-5 h-5" /> : <Pin className="w-5 h-5" />}
+          <span className="text-[9px] font-bold uppercase tracking-wide">{customer.pinned ? 'Unpin' : 'Pin'}</span>
+        </button>
         {userRole === 'owner' && (
           <button
             onClick={() => setShowDeleteCustomerConfirm(true)}
@@ -728,6 +718,23 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
                       Bal. Rs {Math.abs(runBal).toLocaleString()}
                     </p>
                     {tx.note && <p className="text-[10px] text-slate-400 truncate mt-0.5">{tx.note}</p>}
+                  {(tx.createdBy || tx.updatedAt) && (
+                    <div className="flex items-center gap-1 mt-1 flex-wrap">
+                      {tx.createdBy && (
+                        <span className={cn(
+                          "inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full",
+                          tx.createdBy === 'owner' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-400'
+                        )}>
+                          {tx.createdBy === 'owner' ? '👑 owner' : '👤 employee'}
+                        </span>
+                      )}
+                      {tx.updatedAt && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-50 text-slate-400">
+                          ✏️ edited{tx.updatedBy ? ` (${tx.updatedBy === 'owner' ? '👑' : '👤'} ${tx.updatedBy})` : ''}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {tx.dueDate && (() => {
                     const due = new Date(tx.dueDate);
                     const isOverdue = due < new Date() && tx.type === 'credit';
@@ -747,28 +754,26 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
                     {tx.type === 'payment' && (
                       <p className="text-base font-bold text-emerald-600">{tx.amount.toLocaleString()}</p>
                     )}
-                    {userRole === 'owner' && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => {
-                            setEditingTx(tx);
-                            setEditTxAmount(tx.amount.toString());
-                            setEditTxNote(tx.note || '');
-                          }}
-                          className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-500 hover:text-emerald-700 transition-all"
-                          aria-label="Edit entry"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteTxConfirm(tx)}
-                          className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 transition-all"
-                          aria-label="Delete entry"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setEditingTx(tx);
+                          setEditTxAmount(tx.amount.toString());
+                          setEditTxNote(tx.note || '');
+                        }}
+                        className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-500 hover:text-emerald-700 transition-all"
+                        aria-label="Edit entry"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTxConfirm(tx)}
+                        className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 transition-all"
+                        aria-label="Delete entry"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </motion.div>
               );
@@ -1008,6 +1013,7 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
                           previousAmount: editingTx.amount,
                           nextAmount: amt,
                           note: editTxNote.trim() || '',
+                          updatedBy: userRole as 'owner' | 'employee',
                         });
                         showToast('Entry update ✅', 'success');
                         setEditingTx(null);

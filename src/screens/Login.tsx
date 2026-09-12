@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { auth, db } from '../lib/firebase';
 import { signInAnonymously } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { isOwnerUid } from '../lib/config';
 import { Meteors, ShimmerButton } from '../components/magicui';
 
 interface LoginProps {
@@ -23,9 +24,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     
     try {
       const lowerUser = username.toLowerCase().trim();
-      // SECURITY WARNING: Hardcoded credentials should be replaced with proper authentication
+      // Simple shared password gate. Real privilege comes from the pinned owner
+      // UID list (src/lib/config.ts + firestore.rules) — writing role:'owner'
+      // from the client is impossible under the hardened rules.
       if ((lowerUser === 'owner' || lowerUser === 'employee') && password === '123') {
-        console.warn('Using hardcoded credentials - consider implementing proper authentication');
         // 1. Sign in to Firebase Auth
         let userCred;
         try {
@@ -36,16 +38,26 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           }
           throw authErr;
         }
-        
-        // 2. Ensure user document or update role
-        const userRef = doc(db, 'users', userCred.user.uid);
-        await setDoc(userRef, {
-          role: lowerUser,
-          username: username,
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
 
-        onLogin(lowerUser as 'owner' | 'employee');
+        // 2. Resolve role: owner ONLY for a pinned owner UID signing in as owner.
+        //    Everyone else (including an unknown device using the owner
+        //    username) lands on employee until the UID is pinned.
+        const effectiveRole: 'owner' | 'employee' =
+          lowerUser === 'owner' && isOwnerUid(userCred.user.uid) ? 'owner' : 'employee';
+
+        // 3. Register the users doc once (rules: create must be role:'employee',
+        //    updates are blocked — so skip the write when it already exists).
+        const userRef = doc(db, 'users', userCred.user.uid);
+        const existing = await getDoc(userRef);
+        if (!existing.exists()) {
+          await setDoc(userRef, {
+            role: 'employee',
+            username: lowerUser,
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        onLogin(effectiveRole);
       } else {
         setError('Invalid Credentials! Use "owner" or "employee" as username and "123" as password.');
       }

@@ -1,10 +1,19 @@
 import React from 'react';
-import { Users, Phone, UserCircle, Search, ExternalLink, Calendar, Loader2, X, Plus } from 'lucide-react';
+import { Users, Phone, UserCircle, Search, ExternalLink, Calendar, Loader2, X, Plus, Edit2, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Vendor } from '../types';
 import { dataService } from '../services/dataService';
 import { useToast } from '../context/ToastContext';
 import { ShimmerButton } from '../components/magicui';
+
+const EMPTY_VENDOR = {
+  name: '',
+  phoneNumber: '',
+  salesmanName: '',
+  salesmanPhone: '',
+  orderBookerName: '',
+  orderBookerPhone: ''
+};
 
 export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole = 'owner' }) => {
   const { showToast } = useToast();
@@ -12,20 +21,20 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
   const [vendors, setVendors] = React.useState<Vendor[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [showAddModal, setShowAddModal] = React.useState(false);
-  const [newVendor, setNewVendor] = React.useState({
-    name: '',
-    phoneNumber: '',
-    salesmanName: '',
-    salesmanPhone: '',
-    orderBookerName: '',
-    orderBookerPhone: ''
-  });
+  const [editingVendor, setEditingVendor] = React.useState<Vendor | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = React.useState<Vendor | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const [newVendor, setNewVendor] = React.useState({ ...EMPTY_VENDOR });
+
+  const refreshVendors = async () => {
+    const data = await dataService.getVendors();
+    setVendors(data || []);
+  };
 
   React.useEffect(() => {
     const fetch = async () => {
       try {
-        const data = await dataService.getVendors();
-        setVendors(data || []);
+        await refreshVendors();
       } catch {
         setVendors([]);
       } finally {
@@ -35,10 +44,31 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
     fetch();
   }, []);
 
-  const handleDelete = async (id: string) => {
-    if (userRole !== 'owner') return;
-    // TODO: implement vendor delete in dataService
-    showToast('Delete vendor feature coming soon.', 'info');
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    setSaving(true);
+    try {
+      await dataService.deleteVendor(deleteConfirm.id);
+      await refreshVendors();
+      showToast('Vendor delete ho gaya ✅', 'success');
+      setDeleteConfirm(null);
+    } catch {
+      showToast('Delete nahi ho saka', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEdit = (v: Vendor) => {
+    setEditingVendor(v);
+    setNewVendor({
+      name: v.name || '',
+      phoneNumber: v.phoneNumber || '',
+      salesmanName: v.salesmanName || '',
+      salesmanPhone: v.salesmanPhone || '',
+      orderBookerName: v.orderBookerName || '',
+      orderBookerPhone: v.orderBookerPhone || '',
+    });
   };
 
   const filteredVendors = (vendors || []).filter(v => {
@@ -57,25 +87,23 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
       showToast('Company name required hai', 'warning');
       return;
     }
-    setLoading(true);
+    setSaving(true);
     try {
-      await dataService.addVendor(newVendor);
-      const data = await dataService.getVendors();
-      setVendors(data || []);
+      if (editingVendor) {
+        await dataService.updateVendor(editingVendor.id, newVendor);
+        showToast('Vendor update ✅', 'success');
+      } else {
+        await dataService.addVendor(newVendor);
+        showToast('Vendor added successfully!', 'success');
+      }
+      await refreshVendors();
       setShowAddModal(false);
-      showToast('Vendor added successfully!', 'success');
-      setNewVendor({
-        name: '',
-        phoneNumber: '',
-        salesmanName: '',
-        salesmanPhone: '',
-        orderBookerName: '',
-        orderBookerPhone: ''
-      });
+      setEditingVendor(null);
+      setNewVendor({ ...EMPTY_VENDOR });
     } catch (e) {
-      showToast('Failed to add vendor', 'error');
+      showToast(editingVendor ? 'Update nahi ho saka' : 'Failed to add vendor', 'error');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -89,7 +117,7 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
           </div>
           {userRole === 'owner' && (
             <ShimmerButton
-              onClick={() => setShowAddModal(true)}
+              onClick={() => { setEditingVendor(null); setNewVendor({ ...EMPTY_VENDOR }); setShowAddModal(true); }}
               background="rgba(2,44,34,1)"
               borderRadius="12px"
               className="text-white px-6 py-3 font-bold"
@@ -137,6 +165,24 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                     </div>
                   </div>
                 </div>
+                {userRole === 'owner' && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => { openEdit(vendor); setShowAddModal(true); }}
+                      className="p-2 rounded-xl hover:bg-emerald-50 text-slate-400 hover:text-emerald-700 transition-colors"
+                      aria-label="Edit vendor"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(vendor)}
+                      className="p-2 rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+                      aria-label="Delete vendor"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -201,16 +247,16 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
         </div>
       )}
 
-      {/* Add Vendor Modal */}
+      {/* Add / Edit Vendor Modal */}
       <AnimatePresence>
-        {showAddModal && (
+        {(showAddModal || editingVendor) && (
           <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-emerald-950/20 backdrop-blur-md"
-              onClick={() => setShowAddModal(false)}
+              onClick={() => { setShowAddModal(false); setEditingVendor(null); setNewVendor({ ...EMPTY_VENDOR }); }}
             />
             <motion.div
               initial={{ opacity: 0, y: '100%' }}
@@ -220,8 +266,8 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
               className="relative w-full max-w-lg glass-card rounded-t-[40px] sm:rounded-[40px] p-6 sm:p-8 shadow-2xl space-y-6 max-h-[92vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-emerald-900">Add New Vendor</h2>
-                <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-emerald-50 rounded-full transition-colors text-slate-400">
+                <h2 className="text-2xl font-bold text-emerald-900">{editingVendor ? 'Edit Vendor' : 'Add New Vendor'}</h2>
+                <button onClick={() => { setShowAddModal(false); setEditingVendor(null); setNewVendor({ ...EMPTY_VENDOR }); }} className="p-2 hover:bg-emerald-50 rounded-full transition-colors text-slate-400">
                   <X className="w-6 h-6" />
                 </button>
               </div>
@@ -301,8 +347,55 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                 borderRadius="16px"
                 className="w-full py-6 text-white font-bold text-xl"
               >
-                Save Vendor
+                {saving ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : editingVendor ? 'Save Changes' : 'Save Vendor'}
               </ShimmerButton>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirm Modal */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-emerald-950/30 backdrop-blur-md"
+              onClick={() => setDeleteConfirm(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: '100%' }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="relative w-full max-w-sm glass-card rounded-t-[40px] sm:rounded-[40px] p-6 sm:p-8 shadow-2xl space-y-5 text-center"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto">
+                <Trash2 className="w-7 h-7 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-emerald-950">"{deleteConfirm.name}" ko delete karein?</h3>
+                <p className="text-xs text-slate-400 font-medium mt-1">Ye wapas nahi aayega.</p>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="flex-1 py-3.5 rounded-2xl border border-emerald-100 text-sm font-bold text-slate-500 hover:bg-emerald-50 transition-colors"
+                  disabled={saving}
+                >
+                  Nahi
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="flex-1 py-3.5 rounded-2xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+                  disabled={saving}
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Haan, Delete
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

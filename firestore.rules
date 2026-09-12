@@ -5,11 +5,30 @@ service cloud.firestore {
       allow read, write: if false;
     }
     function isSignedIn() { return request.auth != null; }
+
+    // ─── OWNER = pinned UIDs (single source of truth) ───
+    // The users collection can NO LONGER grant owner: creates are employee-only
+    // and updates are blocked, so a client can never write role:'owner'.
+    // If the owner signs in from a fresh device/browser (new anonymous UID),
+    // add that UID here (Firebase Console → Firestore → Rules → Publish)
+    // AND to src/lib/config.ts OWNER_UIDS.
     function isOwner() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+      return isSignedIn() && request.auth.uid in [
+        '08VzTr2zwJWlAghuEzejiG2e2wK2',
+        'anUHmDl4YRZ0BqFYmrXHHHg8ivR2',
+        'LJp1rwKXtPhk0MZkqwEoJ0dQVyi1',
+        'JcGOAkD83RdiolyHo6Gy7fKHSy43',
+        'CFBJSGYI7UQ992gzETIFfovE7Bn1',
+        'LjFMhn9XJsbI50dRpaKb77p2Je53',
+        'YTyahU4VQOg0eJvJPcpYrQ0E3kZ2',
+        'mwHWaQeK8WOxCi8lBKsS24QMlk03',
+        '9E9aRBR2cxTvHfbn0ilL7qbCZnr1',
+        '0IakMuSXBuYxTh4fWIfJdjRtesp1',
+        'eu0YiCEw4YR6bZSI1pz7B8iVDhf2',
+        '52O4IyAdPnUlwO6et9y5CjVQJMH2'
+      ];
     }
+
     match /stock/{id} { allow read, update: if isSignedIn(); allow create: if isSignedIn(); allow delete: if isOwner(); }
     match /purchases/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
     match /openingStock/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
@@ -17,31 +36,33 @@ service cloud.firestore {
     match /vendors/{id} { allow read, create, update: if isSignedIn(); allow delete: if isOwner(); }
     match /sales/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
     match /returns/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
+
+    // users: self-registration as EMPLOYEE only; docs are immutable afterwards.
+    // Owner role comes exclusively from the pinned UID list in isOwner().
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow create: if isSignedIn() && userId == request.auth.uid;
-      allow update: if isSignedIn() && userId == request.auth.uid;
+      allow create: if isSignedIn() && userId == request.auth.uid
+                    && request.resource.data.role == 'employee';
+      allow update: if false;
       allow delete: if isOwner();
     }
+
     match /monthlyProfits/{id} { allow read: if isSignedIn(); allow write: if isOwner(); }
     match /meta/{id} { allow read: if isSignedIn(); allow write: if isOwner(); }
+
+    // Khata: employees get full transaction edit/delete; whole-customer delete
+    // (cascade) stays owner-only.
     match /khataCustomers/{id} { allow read, create, update: if isSignedIn(); allow delete: if isOwner(); }
-    match /khataTransactions/{id} { allow read, create, update: if isSignedIn(); allow delete: if isOwner(); }
+    match /khataTransactions/{id} { allow read, create, update, delete: if isSignedIn(); }
 
     // ─── PUBG HISAB ───
-    // Items: stock jaisa — read/create/update signed-in, delete owner-only
     match /pubgItems/{id} { allow read, create, update: if isSignedIn(); allow delete: if isOwner(); }
-    // Purchases: purchases jaisa — read/create signed-in, update/delete owner-only
     match /pubgPurchases/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
-    // Sales: sales jaisa — read/create signed-in, update/delete owner-only
     match /pubgSales/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
 
     // ─── ONLINE SHOP ───
-    // Items: stock jaisa
     match /shopItems/{id} { allow read, create, update: if isSignedIn(); allow delete: if isOwner(); }
-    // Purchases: purchases jaisa
     match /shopPurchases/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
-    // Orders: sales jaisa
     match /shopOrders/{id} { allow read, create: if isSignedIn(); allow update, delete: if isOwner(); }
   }
 }

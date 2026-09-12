@@ -2,10 +2,11 @@
 // Shared by Reports.tsx, ShareReport.tsx and App.tsx so every screen computes
 // profit the SAME way (this was the root cause of "profit alag dikh raha hai").
 
-export type Period = 'today' | 'month' | 'year' | 'all';
+export type Period = 'today' | 'week' | 'month' | 'year' | 'all';
 
 export const PERIOD_LABELS: Record<Period, string> = {
   today: 'Aaj',
+  week: 'Is Hafte',
   month: 'Is Mahine',
   year: 'Is Saal',
   all: 'Sab (All Time)',
@@ -21,6 +22,14 @@ export const periodStart = (period: Period): number | null => {
   switch (period) {
     case 'today': {
       const d = new Date(now); d.setHours(0, 0, 0, 0); return d.getTime();
+    }
+    case 'week': {
+      // Start of this week (Monday, Pakistani business week)
+      const d = new Date(now);
+      d.setHours(0, 0, 0, 0);
+      const dow = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
+      d.setDate(d.getDate() - dow);
+      return d.getTime();
     }
     case 'month': {
       const d = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0); return d.getTime();
