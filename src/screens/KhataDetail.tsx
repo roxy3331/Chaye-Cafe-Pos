@@ -1,22 +1,23 @@
-import React from 'react';
+﻿import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Phone, Loader2, X, Trash2, Edit2, Save,
-  AlertCircle, MessageCircle, Building2, Pin, PinOff
+  AlertCircle, MessageCircle, Building2, Pin, PinOff, CreditCard
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { dataService } from '../services/dataService';
 import { useToast } from '../context/ToastContext';
 import { KhataCustomer, KhataTransaction } from '../types';
+import { NumberTicker, BorderBeam, FlipIn } from '../components/magicui';
 
-// ─── Calculator Hook ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Calculator Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function useCalculator() {
   const [display, setDisplay] = React.useState('0');
   const [prevValue, setPrevValue] = React.useState<number | null>(null);
   const [operator, setOperator] = React.useState<string | null>(null);
   const [waitingNext, setWaitingNext] = React.useState(false);
-  const [expressionStr, setExpressionStr] = React.useState('');
+  const [completedExpr, setCompletedExpr] = React.useState('');
 
   const compute = (a: number, op: string, b: number): number => {
     if (op === '+') return a + b;
@@ -29,28 +30,37 @@ function useCalculator() {
   const fmt = (n: number) =>
     Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
 
+  // Derive expression from state — no manual tracking, no duplication bugs
+  const expressionStr = React.useMemo(() => {
+    if (completedExpr) return completedExpr;
+    if (prevValue !== null && operator) {
+      const left = Number.isInteger(prevValue) ? String(prevValue) : prevValue.toFixed(2).replace(/\.?0+$/, '');
+      if (waitingNext) return `${left} ${operator}`;
+      return `${left} ${operator} ${display}`;
+    }
+    return '';
+  }, [prevValue, operator, display, waitingNext, completedExpr]);
+
   const press = (btn: string) => {
     if (btn === 'AC') {
       setDisplay('0'); setPrevValue(null); setOperator(null); setWaitingNext(false);
-      setExpressionStr('');
+      setCompletedExpr('');
       return;
     }
     if (btn === '⌫') {
       setDisplay(prev => prev.length > 1 ? prev.slice(0, -1) : '0');
+      setCompletedExpr('');
       return;
     }
     if (['+', '-', '×', '÷'].includes(btn)) {
+      setCompletedExpr('');
       const curr = parseFloat(display) || 0;
       if (prevValue !== null && operator && !waitingNext) {
-        // Chain: compute pending op first, use result as new left-hand value
         const result = compute(prevValue, operator, curr);
-        const s = fmt(result);
-        setDisplay(s);
+        setDisplay(fmt(result));
         setPrevValue(result);
-        setExpressionStr(prev => `${prev} ${fmt(curr)} ${btn}`);
       } else {
         setPrevValue(curr);
-        setExpressionStr(`${display} ${btn}`);
       }
       setOperator(btn);
       setWaitingNext(true);
@@ -58,29 +68,33 @@ function useCalculator() {
     }
     if (btn === '%') {
       setDisplay(prev => fmt(parseFloat(prev) / 100));
+      setCompletedExpr('');
       return;
     }
     if (btn === '=') {
       if (prevValue !== null && operator) {
         const curr = parseFloat(display) || 0;
         const result = compute(prevValue, operator, curr);
-        setExpressionStr(prev => `${prev} ${fmt(curr)} = ${fmt(result)}`);
+        const left = Number.isInteger(prevValue) ? String(prevValue) : prevValue.toFixed(2).replace(/\.?0+$/, '');
+        setCompletedExpr(`${left} ${operator} ${fmt(curr)} = ${fmt(result)}`);
         setDisplay(fmt(result));
         setPrevValue(null); setOperator(null); setWaitingNext(false);
       }
       return;
     }
     if (btn === '.') {
+      setCompletedExpr('');
       if (waitingNext) { setDisplay('0.'); setWaitingNext(false); return; }
       if (!display.includes('.')) setDisplay(prev => prev + '.');
       return;
     }
     // digit
+    setCompletedExpr('');
     if (waitingNext) { setDisplay(btn); setWaitingNext(false); return; }
     setDisplay(prev => prev === '0' ? btn : prev.length < 12 ? prev + btn : prev);
   };
 
-  const reset = () => { setDisplay('0'); setPrevValue(null); setOperator(null); setWaitingNext(false); setExpressionStr(''); };
+  const reset = () => { setDisplay('0'); setPrevValue(null); setOperator(null); setWaitingNext(false); setCompletedExpr(''); };
   const value = parseFloat(display) || 0;
 
   // Auto-resolves any pending operation — use this for saving, not `value`
@@ -98,7 +112,7 @@ function useCalculator() {
   return { display, operator, press, reset, value, computedValue, expressionStr };
 }
 
-// ─── Running Balance Calculator ───────────────────────────────────────────────
+// â”€â”€â”€ Running Balance Calculator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function computeRunningBalances(txs: KhataTransaction[], currentBalance: number): number[] {
   // txs are newest-first. Balance shown = balance AFTER that transaction.
   const balances: number[] = [];
@@ -110,7 +124,7 @@ function computeRunningBalances(txs: KhataTransaction[], currentBalance: number)
   return balances;
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole = 'owner' }) => {
   const { customerId } = useParams<{ customerId: string }>();
   const navigate = useNavigate();
@@ -148,6 +162,11 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
   const [editTxAmount, setEditTxAmount] = React.useState('');
   const [editTxNote, setEditTxNote] = React.useState('');
   const [editTxSaving, setEditTxSaving] = React.useState(false);
+  const [showDeleteCustomerConfirm, setShowDeleteCustomerConfirm] = React.useState(false);
+  const [pendingTxWarning, setPendingTxWarning] = React.useState<{ type: 'balance' | 'creditLimit'; amount: number } | null>(null);
+  const [showWhatsAppModal, setShowWhatsAppModal] = React.useState(false);
+
+  React.useEffect(() => { window.scrollTo(0, 0); }, []);
 
   // Bug #4 Fix: single doc subscription (not full collection)
   // Bug #5 Fix: separate loaded flags, both must be true to hide loader
@@ -190,6 +209,15 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
 
   const loading = !customerLoaded || !txLoaded;
 
+  // Memoized running balances — O(n) over all transactions, recomputed only when
+  // transactions or balance actually change. Declared before any early return so the
+  // Rules of Hooks are satisfied regardless of whether customer is loaded yet.
+  const balance = customer?.totalBalance || 0;
+  const runningBalances = React.useMemo(
+    () => computeRunningBalances(transactions, balance),
+    [transactions, balance]
+  );
+
   const openTxModal = (type: 'credit' | 'payment') => {
     setTxType(type);
     setTxNote('');
@@ -198,23 +226,8 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
     setShowTxModal(true);
   };
 
-  const handleAddTx = async () => {
-    const amount = calc.computedValue;
-    if (!amount || amount <= 0) { showToast('Amount likhein', 'warning'); return; }
+  const saveTx = async (amount: number) => {
     if (!customer || !customerId) return;
-
-    const bal = customer.totalBalance || 0;
-    // Over-payment warning
-    if (txType === 'payment' && bal <= 0) {
-      const ok = window.confirm(`Balance pehle se Rs 0 ya Advance hai. Kya phir bhi Rs ${amount} payment add karein?`);
-      if (!ok) return;
-    }
-    // Credit limit warning
-    if (txType === 'credit' && customer.creditLimit && (bal + amount) > customer.creditLimit) {
-      const ok = window.confirm(`⚠️ Credit Limit Cross ho jaye gi!\n\nLimit: Rs ${customer.creditLimit.toLocaleString()}\nNew Balance: Rs ${(bal + amount).toLocaleString()}\n\nKya phir bhi add karein?`);
-      if (!ok) return;
-    }
-
     setTxSaving(true);
     try {
       await dataService.addKhataTransaction({
@@ -222,19 +235,41 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         customerName: customer.name,
         type: txType,
         amount,
-        note: txNote.trim() || undefined,
+        note: txNote.trim() || '',
         ...(txDueDate ? { dueDate: txDueDate } : {}),
       });
       showToast(txType === 'credit' ? `Rs ${amount.toLocaleString()} udhar add ✅` : `Rs ${amount.toLocaleString()} payment record ✅`, 'success');
       setShowTxModal(false);
+      setPendingTxWarning(null);
     } catch (err: any) {
       const msg = err?.message || String(err);
       const parsed = (() => { try { return JSON.parse(msg); } catch { return null; } })();
       const detail = parsed?.error || msg;
       console.error('TX SAVE ERROR:', detail);
       showToast(detail.slice(0, 80), 'error');
+    } finally {
+      setTxSaving(false);
     }
-    finally { setTxSaving(false); }
+  };
+
+  const handleAddTx = async () => {
+    const amount = calc.computedValue;
+    if (!amount || amount <= 0) { showToast('Amount likhein', 'warning'); return; }
+    if (!customer || !customerId) return;
+
+    const bal = customer.totalBalance || 0;
+    // Over-payment warning — show modal instead of window.confirm
+    if (txType === 'payment' && bal <= 0) {
+      setPendingTxWarning({ type: 'balance', amount });
+      return;
+    }
+    // Credit limit warning — show modal instead of window.confirm
+    if (txType === 'credit' && customer.creditLimit && (bal + amount) > customer.creditLimit) {
+      setPendingTxWarning({ type: 'creditLimit', amount });
+      return;
+    }
+
+    await saveTx(amount);
   };
 
   const handleTogglePin = async () => {
@@ -294,20 +329,76 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
 
   const buildWhatsAppText = (cust: KhataCustomer) => {
     const bal = cust.totalBalance || 0;
-    const today = new Date().toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' });
-    const lines = [
-      `Assalam o Alaikum *${cust.name}* Sahab,`,
-      '',
-      `Aap ki shop ki baaki rakam yaad dilana chahta hun:`,
-      '',
-      `📋 *Amount: Rs. ${Math.abs(bal).toLocaleString()}*`,
-      `📅 *Date: ${today}*`,
-      '',
-      `Meherbani farma kar jald settlement kar lein.`,
-      `Jazak Allah Khair. 🤝`,
-      '',
-      `_Chaye Cafe_`,
+    const limit = cust.creditLimit;
+    const balStr = `Rs ${Math.abs(bal).toLocaleString()}`;
+    const n = cust.name;
+
+    // Determine tier (same 7-tier logic as Khata.tsx)
+    let tier = 0;
+    if (limit && limit > 0 && bal > 0) {
+      const pct = (bal / limit) * 100;
+      if (pct <= 50) tier = 1;
+      else if (pct <= 80) tier = 2;
+      else if (pct <= 99) tier = 3;
+      else if (pct <= 150) tier = 4;
+      else if (pct <= 250) tier = 5;
+      else if (pct <= 400) tier = 6;
+      else tier = 7;
+    }
+
+    let lines: string[];
+    if (tier <= 1) lines = [
+      `Assalam Walaikum *${n}* Bhai! 🙏`, ``,
+      `Aapka hisab:`, `💰 *Balance: ${balStr}*`, ``,
+      `Meherbani karke jaldi settle karein.`, `Shukriya! 🤝`, ``,
+      `— Chaye-Cafe Portal`,
     ];
+    else if (tier === 2) lines = [
+      `Assalam Walaikum *${n}* Bhai,`, ``,
+      `Aapka balance: *${balStr}*`,
+      `📊 Credit limit qareeb aa rahi hai.`,
+      `Paise dein taake limit available rahe. 🙏`, ``,
+      `— Chaye-Cafe Portal`,
+    ];
+    else if (tier === 3) lines = [
+      `Assalam Walaikum *${n}* Bhai,`, ``,
+      `⚠️ *ZAROORI:* Balance *${balStr}* hai.`,
+      `Credit limit khatam hone wali hai!`, ``,
+      `Jaldi payment karein. 🙏`, ``,
+      `— Chaye-Cafe Portal`,
+    ];
+    else if (tier === 4) lines = [
+      `Assalam Walaikum *${n}* Bhai,`, ``,
+      `🚫 *Limit cross ho gayi hai.*`,
+      `Balance: *${balStr}*`, ``,
+      `Aaj payment karein. Shukriya. 🙏`, ``,
+      `— Chaye-Cafe Portal`,
+    ];
+    else if (tier === 5) lines = [
+      `Assalam Walaikum *${n}* Bhai,`, ``,
+      `⚠️ Aapka hisab bahut zyada ho gaya hai.`,
+      `Balance: *${balStr}*`, ``,
+      `Credit bilkul nahi bacha. Aaj payment`,
+      `zaroor karein. 🙏`, ``,
+      `— Chaye-Cafe Portal`,
+    ];
+    else if (tier === 6) lines = [
+      `*${n}* Bhai,`, ``,
+      `🚫 *ZAROORI:* Aapka credit band ho gaya.`,
+      `Balance: *${balStr}*`, ``,
+      `Agla maal NAHI milega jab tak paise`,
+      `nahi aate. Aaj milein. 🙏`, ``,
+      `— Chaye-Cafe Portal`,
+    ];
+    else lines = [
+      `*${n}* Bhai,`, ``,
+      `🆘 *FINAL:* Hisab bahut zyada barh gaya.`,
+      `Balance: *${balStr}*`, ``,
+      `Fori payment karein warna aage ka`,
+      `lena dena band. ASAP milein.`, ``,
+      `— Chaye-Cafe Portal`,
+    ];
+
     return encodeURIComponent(lines.join('\n'));
   };
 
@@ -326,6 +417,111 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
     } else {
       window.open(`https://wa.me/${number}?text=${text}`, '_blank');
     }
+  };
+
+  const buildLimitReminderText = (cust: KhataCustomer) => {
+    const bal = cust.totalBalance || 0;
+    const limit = cust.creditLimit;
+    if (!limit || limit <= 0 || bal <= 0) return null;
+    const pct = (bal / limit) * 100;
+    if (pct < 20) return null; // too little used — no reminder needed
+    const remaining = Math.max(0, limit - bal);
+    const remStr = `Rs ${remaining.toLocaleString()}`;
+    const n = cust.name;
+
+    // 5-tier limit reminder (20% → 100% used)
+    let lines: string[];
+    if (pct < 50) {
+      // Tier 1 — Friendly info (20–49%)
+      lines = [
+        `Assalam Walaikum *${n}* Bhai! 😊`,
+        ``,
+        `Aapki credit limit mein abhi *${remStr}* available hai.`,
+        `Payment karte rahein taake limit hamesha available rahe. 🙏`,
+        ``,
+        `— Chaye-Cafe Portal`,
+      ];
+    } else if (pct < 75) {
+      // Tier 2 — Polite caution (50–74%)
+      lines = [
+        `Assalam Walaikum *${n}* Bhai,`,
+        ``,
+        `📊 Aapki aadhi se zyada credit limit use ho gayi hai.`,
+        `💳 *Sirf ${remStr} limit bachi hai.*`,
+        ``,
+        `Meherbani karke jaldi payment karein taake limit available rahe. 🙏`,
+        ``,
+        `— Chaye-Cafe Portal`,
+      ];
+    } else if (pct < 90) {
+      // Tier 3 — Clear warning (75–89%)
+      lines = [
+        `Assalam Walaikum *${n}* Bhai,`,
+        ``,
+        `⚠️ *KHABARDAR:* Credit limit khatam hone wali hai!`,
+        `💳 *Sirf ${remStr} bachi hai* — agle order ke liye kaafi nahi hogi.`,
+        ``,
+        `Aaj ya kal payment ZAROOR karein. 🙏`,
+        ``,
+        `— Chaye-Cafe Portal`,
+      ];
+    } else if (pct < 100) {
+      // Tier 4 — Urgent (90–99%)
+      lines = [
+        `*${n}* Bhai,`,
+        ``,
+        `🔴 *FORI KAAM:* Limit khatam hone wali hai!`,
+        `💳 *Bas ${remStr} hi bachi hai.*`,
+        `Agar aaj payment nahi aayi toh kal agle order pe CREDIT BAND ho jayega.`,
+        ``,
+        `Please ABHI contact karein. 🙏`,
+        ``,
+        `— Chaye-Cafe Portal`,
+      ];
+    } else {
+      // Tier 5 — Final (100%+)
+      lines = [
+        `*${n}* Bhai,`,
+        ``,
+        `🚫 *FINAL NOTICE: Credit limit POORI khatam ho gayi hai.*`,
+        `💳 *Koi limit nahi bachi.*`,
+        ``,
+        `Jab tak payment nahi aayegi — agle order pe MAAL NAHI MILEGA.`,
+        `Aaj hi milein. Shukriya. 🙏`,
+        ``,
+        `— Chaye-Cafe Portal`,
+      ];
+    }
+    return encodeURIComponent(lines.join('\n'));
+  };
+
+  const handleLimitReminderShare = () => {
+    if (!customer) return;
+    const number = formatWhatsAppNumber(customer.phone);
+    if (!number) { showToast('Customer ka valid phone number nahi hai', 'warning'); return; }
+    const text = buildLimitReminderText(customer);
+    if (!text) { showToast('Limit reminder ke liye credit limit set karein (20%+ use hona chahiye)', 'info'); return; }
+    setShowWhatsAppModal(true);
+  };
+
+  const sendWhatsAppMessage = (isBusiness: boolean) => {
+    if (!customer) return;
+    const number = formatWhatsAppNumber(customer.phone);
+    if (!number) return;
+    const text = buildLimitReminderText(customer);
+    if (!text) return;
+
+    if (isBusiness) {
+      const isAndroid = /android/i.test(navigator.userAgent);
+      if (isAndroid) {
+        window.open(`intent://send?phone=${number}&text=${text}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end`, '_blank');
+      } else {
+        window.open(`https://api.whatsapp.com/send?phone=${number}&text=${text}`, '_blank');
+      }
+    } else {
+      window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+    }
+    setShowWhatsAppModal(false);
   };
 
   const formatDate = (ts: any) => {
@@ -352,17 +548,15 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
     return (
       <div className="text-center py-24">
         <p className="text-slate-400 font-bold">Customer nahi mila</p>
-        <button onClick={() => navigate('/khata')} className="mt-4 text-emerald-700 font-bold text-sm">← Wapas Jao</button>
+        <button onClick={() => navigate('/khata')} className="mt-4 text-emerald-700 font-bold text-sm">â† Wapas Jao</button>
       </div>
     );
   }
 
-  const balance = customer.totalBalance || 0;
   const isOwed = balance > 0;
   const isClear = balance === 0;
-  const runningBalances = computeRunningBalances(transactions, balance);
 
-  // ── CALCULATOR BUTTONS LAYOUT ──
+  // â”€â”€ CALCULATOR BUTTONS LAYOUT â”€â”€
   const calcRows = [
     ['AC', 'M+', 'M-', '⌫'],
     ['%', '÷', '×', '-'],
@@ -373,9 +567,9 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
   ];
 
   return (
-    <div className="pb-32">
+    <div className="pb-44 md:pb-8">
 
-      {/* ── Top Bar ── */}
+      {/* â”€â”€ Top Bar â”€â”€ */}
       <div className="flex items-center gap-3 mb-5">
         <button onClick={() => navigate('/khata')} className="p-2 rounded-xl hover:bg-emerald-50 text-emerald-900">
           <ArrowLeft className="w-5 h-5" />
@@ -401,15 +595,22 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         )}
       </div>
 
-      {/* ── Balance Hero Card (DigiKhata style) ── */}
+      {/* â”€â”€ Balance Hero Card (DigiKhata style) â”€â”€ */}
       <div className={cn(
         "rounded-3xl p-6 mb-4 text-white relative overflow-hidden",
         isOwed ? "bg-red-600" : isClear ? "bg-emerald-700" : "bg-blue-600"
       )}>
+        <BorderBeam
+          colorFrom="rgba(255,255,255,0.6)"
+          colorTo="rgba(255,255,255,0.1)"
+          size={160}
+          duration={7}
+          borderWidth={1.5}
+        />
         <div className="absolute -right-6 -top-6 w-36 h-36 bg-white/10 rounded-full" />
         <div>
           <p className="text-3xl font-bold tracking-tight relative z-10">
-            Rs {Math.abs(balance).toLocaleString()}
+            Rs <NumberTicker value={Math.abs(balance)} />
           </p>
           <p className="text-sm font-semibold opacity-75 mt-1">
             {isOwed ? 'Aap ko milna hai (You will get)' : isClear ? '✅ Hisab saaf hai' : 'Customer ka advance hai'}
@@ -418,11 +619,11 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         <p className="text-xs opacity-50 mt-3">{transactions.length} entries total</p>
       </div>
 
-      {/* ── Action Buttons row ── */}
+      {/* â”€â”€ Action Buttons row â”€â”€ */}
       <div
         className={cn(
           'grid gap-2 mb-5',
-          userRole === 'owner' ? 'grid-cols-5' : 'grid-cols-2 sm:grid-cols-3'
+          userRole === 'owner' ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3'
         )}
       >
         <button onClick={() => handleWhatsAppShare('customer')} className="flex flex-col items-center gap-1 py-2.5 bg-white border border-emerald-100 rounded-2xl hover:bg-green-50 transition-colors">
@@ -436,6 +637,22 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
           <Building2 className="w-5 h-5 text-emerald-700" />
           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Business</span>
         </button>
+        {customer.creditLimit && customer.creditLimit > 0 && (() => {
+          const pct = ((customer.totalBalance || 0) / customer.creditLimit) * 100;
+          if (pct < 20) return null;
+          const remaining = Math.max(0, customer.creditLimit - (customer.totalBalance || 0));
+          const urgentColor = pct >= 90 ? 'bg-red-50 border-red-200 hover:bg-red-100' :
+                              pct >= 75 ? 'bg-orange-50 border-orange-200 hover:bg-orange-100' :
+                              'bg-blue-50 border-blue-200 hover:bg-blue-100';
+          const iconColor = pct >= 90 ? 'text-red-600' : pct >= 75 ? 'text-orange-500' : 'text-blue-600';
+          return (
+            <button onClick={handleLimitReminderShare}
+              className={`flex flex-col items-center gap-1 py-2.5 border rounded-2xl transition-colors ${urgentColor}`}>
+              <CreditCard className={`w-5 h-5 ${iconColor}`} />
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wide">Limit</span>
+            </button>
+          );
+        })()}
         {userRole === 'owner' && (
           <button
             onClick={() => { setEditName(customer.name); setEditPhone(customer.phone || ''); setEditNote(customer.note || ''); setEditCreditLimit(customer.creditLimit ? String(customer.creditLimit) : ''); setEditTrustBadge((customer.trustBadge as any) || ''); setShowEditModal(true); }}
@@ -462,7 +679,7 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         )}
         {userRole === 'owner' && (
           <button
-            onClick={() => { if (window.confirm('Yeh customer aur sari entries delete ho jayengi. Sure?')) { dataService.deleteKhataCustomer(customerId!).then(() => { showToast('Customer delete ✅', 'success'); navigate('/khata'); }); } }}
+            onClick={() => setShowDeleteCustomerConfirm(true)}
             className="flex flex-col items-center gap-1 py-2.5 bg-white border border-red-100 rounded-2xl hover:bg-red-50 transition-colors"
           >
             <Trash2 className="w-5 h-5 text-red-500" />
@@ -471,10 +688,10 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         )}
       </div>
 
-      {/* ── Transaction Table — DigiKhata style ── */}
+      {/* â”€â”€ Transaction Table — DigiKhata style â”€â”€ */}
       <div className="bg-white border border-emerald-50 rounded-3xl overflow-hidden mb-4">
         {/* Table header */}
-        <div className="grid grid-cols-[1fr_80px_80px] px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+        <div className="grid grid-cols-[1fr_70px_88px] px-3 sm:px-4 py-2.5 bg-slate-50 border-b border-slate-100">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Entries</span>
           <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest text-right">You Gave</span>
           <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest text-right">You Got</span>
@@ -495,7 +712,7 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   className={cn(
-                    "grid grid-cols-[1fr_80px_80px] px-4 py-3 items-center group",
+                    "grid grid-cols-[1fr_70px_88px] px-3 sm:px-4 py-3 items-center group",
                     tx.type === 'credit' ? "bg-red-50/40" : "bg-white"
                   )}
                 >
@@ -525,13 +742,13 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
                     )}
                   </div>
 
-                  {/* You Got (payment = customer ne diya = you got) */}
-                  <div className="text-right flex items-center justify-end gap-1">
+                  {/* You Got (payment) — amount on top, action buttons below to avoid overflow on mobile */}
+                  <div className="flex flex-col items-end gap-1">
                     {tx.type === 'payment' && (
                       <p className="text-base font-bold text-emerald-600">{tx.amount.toLocaleString()}</p>
                     )}
                     {userRole === 'owner' && (
-                      <>
+                      <div className="flex items-center gap-1">
                         <button
                           onClick={() => {
                             setEditingTx(tx);
@@ -539,16 +756,18 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
                             setEditTxNote(tx.note || '');
                           }}
                           className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-500 hover:text-emerald-700 transition-all"
+                          aria-label="Edit entry"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => setDeleteTxConfirm(tx)}
                           className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 transition-all"
+                          aria-label="Delete entry"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
                 </motion.div>
@@ -558,8 +777,8 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         )}
       </div>
 
-      {/* ── Bottom Action Buttons (fixed) — DigiKhata style ── */}
-      <div className="fixed left-0 right-0 md:left-64 flex z-40 shadow-2xl shadow-slate-900/20 bottom-[88px] md:bottom-0">
+      {/* â”€â”─ Bottom Action Buttons (fixed) — sits just above the mobile bottom nav */}
+      <div className="fixed left-0 right-0 md:left-64 flex z-40 shadow-2xl shadow-slate-900/20 bottom-[76px] md:bottom-0">
         <button
           onClick={() => openTxModal('credit')}
           className="flex-1 py-4 bg-red-600 text-white font-bold text-sm uppercase tracking-widest hover:bg-red-700 transition-colors flex items-center justify-center gap-2 md:relative"
@@ -576,7 +795,7 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         </button>
       </div>
 
-      {/* ── Transaction Modal with Calculator ── */}
+      {/* â”€â”€ Transaction Modal with Calculator â”€â”€ */}
       <AnimatePresence>
         {showTxModal && (
           <>
@@ -680,7 +899,7 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
                 </button>
               </div>
 
-              {/* ── Calculator Keyboard ── */}
+              {/* â”€â”€ Calculator Keyboard â”€â”€ */}
               <div className="px-3 pb-6 pt-1">
                 {calcRows.map((row, ri) => (
                   <div key={ri} className="grid grid-cols-4 gap-2 mb-2">
@@ -717,7 +936,7 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         )}
       </AnimatePresence>
 
-      {/* ── Edit Transaction Modal ── */}
+      {/* â”€â”€ Edit Transaction Modal â”€â”€ */}
       <AnimatePresence>
         {editingTx && (
           <>
@@ -788,7 +1007,7 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
                           type: editingTx.type,
                           previousAmount: editingTx.amount,
                           nextAmount: amt,
-                          note: editTxNote.trim() || undefined,
+                          note: editTxNote.trim() || '',
                         });
                         showToast('Entry update ✅', 'success');
                         setEditingTx(null);
@@ -811,7 +1030,7 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
         )}
       </AnimatePresence>
 
-      {/* ── Edit Customer Modal ── */}
+      {/* â”€â”€ Edit Customer Modal â”€â”€ */}
       <AnimatePresence>
         {showEditModal && (
           <>
@@ -892,6 +1111,133 @@ export const KhataDetail: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ use
                   <button onClick={handleDeleteTx}
                     className="flex-1 py-3 rounded-2xl bg-red-500 text-white text-sm font-bold hover:bg-red-600">Delete</button>
                 </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Customer Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteCustomerConfirm && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[80]" onClick={() => setShowDeleteCustomerConfirm(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 flex items-center justify-center z-[90] pointer-events-none px-4">
+              <div className="pointer-events-auto bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center space-y-5">
+                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto">
+                  <Trash2 className="w-8 h-8 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-emerald-900">Customer Delete Karo?</h3>
+                  <p className="text-slate-500 text-sm mt-2">
+                    <span className="font-bold text-emerald-900">{customer?.name}</span> aur uski sari entries permanently delete ho jayengi. Yeh undo nahi hoga.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowDeleteCustomerConfirm(false)}
+                    className="flex-1 py-3 rounded-2xl border border-emerald-100 text-slate-600 font-bold hover:bg-emerald-50 transition-colors">
+                    Raho
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowDeleteCustomerConfirm(false);
+                      dataService.deleteKhataCustomer(customerId!).then(() => {
+                        showToast('Customer delete ✅', 'success');
+                        navigate('/khata');
+                      });
+                    }}
+                    className="flex-1 py-3 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-colors">
+                    Haan, Delete
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Balance / Credit Limit Warning Modal */}
+      <AnimatePresence>
+        {pendingTxWarning && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[80]" onClick={() => setPendingTxWarning(null)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 flex items-center justify-center z-[90] pointer-events-none px-4">
+              <div className="pointer-events-auto bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center space-y-5">
+                <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto">
+                  <AlertCircle className="w-8 h-8 text-orange-500" />
+                </div>
+                <div>
+                  {pendingTxWarning.type === 'balance' ? (
+                    <>
+                      <h3 className="text-xl font-bold text-emerald-900">Balance Already 0</h3>
+                      <p className="text-slate-500 text-sm mt-2">
+                        Balance pehle se Rs 0 ya Advance hai. Kya phir bhi <span className="font-bold text-emerald-900">Rs {pendingTxWarning.amount.toLocaleString()}</span> payment add karein?
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="text-xl font-bold text-emerald-900">⚠️ Credit Limit Cross</h3>
+                      <p className="text-slate-500 text-sm mt-2">
+                        Limit: <span className="font-bold">Rs {customer?.creditLimit?.toLocaleString()}</span><br />
+                        New Balance ( approx): <span className="font-bold text-red-500">Rs {((customer?.totalBalance || 0) + pendingTxWarning.amount).toLocaleString()}</span><br />
+                        <span className="text-[11px] text-slate-400">Final balance save ke baad update hoga.</span><br />
+                        Kya phir bhi add karein?
+                      </p>
+                    </>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setPendingTxWarning(null)}
+                    className="flex-1 py-3 rounded-2xl border border-emerald-100 text-slate-600 font-bold hover:bg-emerald-50 transition-colors">
+                    Raho
+                  </button>
+                  <button onClick={() => saveTx(pendingTxWarning.amount)}
+                    className="flex-1 py-3 rounded-2xl bg-orange-500 text-white font-bold hover:bg-orange-600 transition-colors">
+                    Haan, Add Karo
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* WhatsApp Share Modal */}
+      <AnimatePresence>
+        {showWhatsAppModal && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[80]" onClick={() => setShowWhatsAppModal(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 flex items-center justify-center z-[90] pointer-events-none px-4">
+              <div className="pointer-events-auto bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center space-y-5">
+                <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto">
+                  <MessageCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">WhatsApp Share</h3>
+                  <p className="text-slate-500 text-sm mt-2">
+                    Kis type se message bhejna hai?
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => sendWhatsAppMessage(false)}
+                    className="flex-1 py-3 rounded-2xl bg-green-500 text-white font-bold hover:bg-green-600 transition-colors">
+                    Simple WhatsApp
+                  </button>
+                  <button onClick={() => sendWhatsAppMessage(true)}
+                    className="flex-1 py-3 rounded-2xl bg-blue-500 text-white font-bold hover:bg-blue-600 transition-colors">
+                    Business WhatsApp
+                  </button>
+                </div>
+                <button onClick={() => setShowWhatsAppModal(false)}
+                  className="w-full py-3 rounded-2xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors">
+                  Cancel
+                </button>
               </div>
             </motion.div>
           </>

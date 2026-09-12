@@ -51,3 +51,85 @@
 body {
   @apply bg-[#f7f9fb] text-[#191c1e] font-sans antialiased;
 }
+
+/* ── Magic UI Keyframes ─────────────────────────────────────────────────── */
+
+@keyframes shimmer-slide {
+  to { transform: translate(calc(100cqw - 100%), 0); }
+}
+
+@keyframes spin-around {
+  0%   { transform: translateZ(0) rotate(0);   }
+  15%, 35% { transform: translateZ(0) rotate(270deg); }
+  51%, 83% { transform: translateZ(0) rotate(180deg); }
+  100% { transform: translateZ(0) rotate(360deg); }
+}
+
+@keyframes border-beam {
+  100% { offset-distance: 100%; }
+}
+
+@keyframes shiny-text {
+  0%, 90%, 100% { background-position: calc(-100% - var(--shimmer-width, 100px)) 0; }
+  30%, 60%      { background-position: calc(100% + var(--shimmer-width, 100px)) 0; }
+}
+
+@keyframes meteor {
+  0%   { transform: rotate(215deg) translateX(0);     opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: rotate(215deg) translateX(-600px); opacity: 0; }
+}
+
+/* ── Magic UI Component Styles ──────────────────────────────────────────── */
+
+@layer components {
+  /* ShimmerButton */
+  .shimmer-button {
+    background: var(--background, rgba(15,118,110,1));
+    border-radius: var(--border-radius, 14px);
+    container-type: inline-size;
+  }
+  .shimmer-button::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      90deg,
+      transparent calc(50% - var(--shimmer-width, 60px)),
+      var(--shimmer-color, rgba(255,255,255,0.4)),
+      transparent calc(50% + var(--shimmer-width, 60px))
+    );
+    animation: shimmer-slide var(--shimmer-duration, 1.6s) linear infinite;
+  }
+
+  /* BorderBeam */
+  .border-beam-effect {
+    border: var(--border-width, 1.5px) solid transparent;
+    border-radius: inherit;
+    background: linear-gradient(
+      var(--background, transparent),
+      var(--background, transparent)
+    ) padding-box,
+    conic-gradient(
+      from calc(var(--border-beam-angle, 0deg)),
+      var(--color-from, #6ee7b7),
+      var(--color-to, #059669),
+      transparent 50%
+    ) border-box;
+    animation: spin-around calc(var(--duration, 10) * 1s) linear infinite;
+  }
+
+  /* Shiny text */
+  .shiny-text-anim {
+    animation: shiny-text 4s ease-in-out infinite;
+  }
+
+  /* Meteor */
+  .animate-meteor {
+    animation: meteor var(--duration, 6s) linear infinite;
+  }
+  .animate-shiny-text {
+    animation: shiny-text 4s ease-in-out infinite;
+  }
+}

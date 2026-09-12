@@ -1,8 +1,9 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Package, ReceiptIndianRupee, BarChart3, Menu, Bell, Users, X, LogOut, Settings, BookOpen, RotateCcw } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, ReceiptIndianRupee, BarChart3, Menu, Bell, Users, X, LogOut, Settings, BookOpen, RotateCcw, Gamepad2, ShoppingBag } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { dataService } from '../services/dataService';
+import { AnimatedShinyText } from './magicui';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -37,7 +38,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout }) 
             <Menu className="w-6 h-6" />
           </button>
           <h1 className="text-lg font-bold tracking-[0.1em] text-emerald-900 uppercase">
-            SHOP HISAB
+            <AnimatedShinyText
+              className="bg-gradient-to-r from-emerald-900 via-emerald-600 to-emerald-900 bg-[length:200%_100%] text-transparent"
+              shimmerWidth={120}
+            >
+              Chaye-Cafe Portal
+            </AnimatedShinyText>
           </h1>
         </div>
         <div className="flex items-center gap-2 md:gap-4">
@@ -119,8 +125,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout }) 
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-white border-r border-emerald-50 flex-col py-8 px-4 z-50">
         <div className="mb-12 px-4">
-          <h2 className="text-xl font-extrabold text-emerald-900 tracking-tighter">SHOP HISAB</h2>
-          <p className="text-[10px] text-emerald-600 font-bold tracking-widest uppercase">Purchase · Stock · Profit</p>
+          <h2 className="text-xl font-extrabold text-emerald-900 tracking-tighter">Chaye-Cafe Portal</h2>
+          <p className="text-[10px] text-emerald-600 font-bold tracking-widest uppercase">Khata · Stock · Hisab</p>
         </div>
         <nav className="space-y-2 flex-1">
           <SidebarLink to="/" icon={<LayoutDashboard />} label="Dashboard" />
@@ -130,7 +136,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout }) 
           <SidebarLink to="/vendors" icon={<Users />} label="Vendors" />
           <SidebarLink to="/khata" icon={<BookOpen />} label="Khata" />
           <SidebarLink to="/returns" icon={<RotateCcw />} label="Returns" />
+          {userRole === 'owner' && <SidebarLink to="/pubg" icon={<Gamepad2 />} label="PUBG Hisab" />}
+          {userRole === 'owner' && <SidebarLink to="/shop" icon={<ShoppingBag />} label="Online Shop" />}
           {userRole === 'owner' && <SidebarLink to="/reports" icon={<BarChart3 />} label="Reports" />}
+          <SidebarLink to="/settings" icon={<Settings />} label="Settings" />
         </nav>
         {onLogout && (
           <button
@@ -158,8 +167,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout }) 
       )}>
         <div className="flex items-center justify-between mb-10 px-2">
           <div>
-            <h2 className="text-xl font-extrabold text-emerald-900 tracking-tighter">SHOP HISAB</h2>
-            <p className="text-[10px] text-emerald-600 font-bold tracking-widest uppercase">Purchase · Stock · Profit</p>
+            <h2 className="text-xl font-extrabold text-emerald-900 tracking-tighter">Chaye-Cafe Portal</h2>
+            <p className="text-[10px] text-emerald-600 font-bold tracking-widest uppercase">Khata · Stock · Hisab</p>
           </div>
           <button
             onClick={() => setMobileOpen(false)}
@@ -187,7 +196,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout }) 
           <MobileDrawerLink to="/vendors" icon={<Users />} label="Vendors" />
           <MobileDrawerLink to="/khata" icon={<BookOpen />} label="Khata" />
           <MobileDrawerLink to="/returns" icon={<RotateCcw />} label="Returns" />
+          {userRole === 'owner' && <MobileDrawerLink to="/pubg" icon={<Gamepad2 />} label="PUBG Hisab" />}
+          {userRole === 'owner' && <MobileDrawerLink to="/shop" icon={<ShoppingBag />} label="Online Shop" />}
           {userRole === 'owner' && <MobileDrawerLink to="/reports" icon={<BarChart3 />} label="Reports" />}
+          <MobileDrawerLink to="/settings" icon={<Settings />} label="Settings" />
         </nav>
 
         {onLogout && (
@@ -202,7 +214,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout }) 
       </aside>
 
       {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-emerald-100 px-2 py-3 pb-safe z-50 flex justify-around items-center">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-emerald-100 px-2 py-3 z-50 flex justify-around items-center" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
         <MobileNavLink to="/" icon={<LayoutDashboard />} label="Home" />
         <MobileNavLink to="/purchase" icon={<ShoppingCart />} label="Purchase" />
         <MobileNavLink to="/stock" icon={<Package />} label="Stock" />
@@ -261,14 +273,16 @@ const MobileNavLink = ({ to, icon, label }: { to: string; icon: React.ReactNode;
     end={to === '/'}
     className={({ isActive }) =>
       cn(
-        "flex flex-col items-center justify-center gap-1 transition-all",
+        // min-w-0 + flex-1 lets labels shrink/truncate instead of overflowing on 6-item layout
+        "flex flex-col items-center justify-center gap-0.5 transition-all min-w-0 flex-1",
         isActive ? "text-emerald-900" : "text-slate-400"
       )
     }
   >
-    <div className={cn("p-1 rounded-lg transition-all", "active:scale-90")}>
+    {/* p-2 + w-6 h-6 icon ≈ 40px tap target (closer to the 44px minimum) */}
+    <div className={cn("p-2 rounded-lg transition-all", "active:scale-90")}>
       {React.cloneElement(icon as React.ReactElement, { className: "w-6 h-6" })}
     </div>
-    <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
+    <span className="text-[9px] font-medium uppercase tracking-wider truncate w-full text-center">{label}</span>
   </NavLink>
 );

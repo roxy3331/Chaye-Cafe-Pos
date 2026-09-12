@@ -152,7 +152,7 @@ export const OpeningStock: React.FC = () => {
               value={pcsPerPack}
               onChange={(e) => setPcsPerPack(e.target.value)}
             />
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center">Total units to be added: <span className="text-emerald-600">{(parseInt(qty || '0') * parseInt(pcsPerPack || '0'))} pieces</span></p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center">Total units to be added: <span className="text-emerald-600">{((parseInt(qty || '0') || 0) * (parseInt(pcsPerPack || '0') || 0))} pieces</span></p>
           </div>
 
           {/* Price Fields */}

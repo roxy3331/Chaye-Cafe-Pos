@@ -7,3 +7,51 @@ coverage/
 .env*
 !.env.example
 firebase-applet-config.json
+.mcp.json
+
+# Secrets & data-reconciliation artifacts (never commit)
+serviceAccount*.json
+*.backup.json
+scripts/data/
+
+# Windows junk & local build/deploy logs
+nul
+src/nul
+build*.txt
+deploy*.txt
+
+# n8n workflow exports (regenerable via alerts/_build_*.js; contain credential refs)
+workflow-*.json
+RY-Official-*.json
+alerts/n8n-workflow-*.json
+alerts/workflow-*.json
+alerts/Cafe-POS-Alerts-*.json
+alerts/webhook_resp.json
+alerts/nul
+
+# Agent/tooling workspace folders (not part of the POS app)
+.commandcode/
+.opencode/
+.windsurf/
+.zcode/
+.claude/
+.agents/
+skills-lock.json
+
+# Unrelated projects kept in this workspace folder
+WellAlly-health/
+Skill_Seekers/
+web-scraper/
+humanizer/
+claude-deep-research-skill/
+claude-seo/
+claudedesignskills/
+superpowers/
+pm-skills/
+social-media-skills/
+dev-browser/
+autoresearch/
+
+
+# Firebase CLI cache
+.firebase/

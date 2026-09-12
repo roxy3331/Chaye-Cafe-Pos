@@ -81,3 +81,95 @@ export interface KhataTransaction {
   updatedAt?: any;
   dueDate?: string; // YYYY-MM-DD, optional payment due date
 }
+
+// ============ PUBG Hisab ============
+
+export interface PubgItem {
+  id: string;
+  name: string;               // '60 UC', '325 UC', 'PUBG Account Lvl 40', custom
+  category: 'UC' | 'Account' | 'Item';
+  buyPrice: number;           // weighted average cost per unit (PKR)
+  sellPrice: number;          // current selling price per unit
+  quantity: number;           // units in stock
+  totalInvested: number;      // quantity × buyPrice (exact accounting)
+  updatedAt?: any;
+}
+
+export interface PubgPurchase {
+  id: string;
+  itemId?: string;
+  name: string;
+  category: 'UC' | 'Account' | 'Item';
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  source?: string;            // distributor / website / reseller
+  note?: string;
+  date: any;
+  monthKey: string;           // 'YYYY-MM'
+}
+
+export interface PubgSale {
+  id: string;
+  itemId?: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;          // actual sell price per unit (editable — rates fluctuate)
+  totalAmount: number;        // unitPrice × quantity
+  unitCost: number;           // frozen weighted-avg cost at sale time
+  profit: number;             // totalAmount − unitCost × quantity (±, negative = loss)
+  customerName?: string;
+  playerId?: string;          // PUBG player ID / nickname
+  note?: string;
+  date: any;
+  monthKey: string;           // 'YYYY-MM'
+}
+
+// ============ Online Shop (Accessories) ============
+
+export type ShopPlatform = 'olx' | 'facebook' | 'whatsapp' | 'walkin' | 'other';
+
+export interface ShopItem {
+  id: string;
+  name: string;
+  category: string;           // emoji-prefixed: '🎧 Audio', '📱 Mobile', '🔌 Cables', '⌚ Wearables', '🎯 Gaming', '🏷️ Other'
+  buyPrice: number;           // weighted average cost per unit
+  sellPrice: number;
+  quantity: number;
+  totalInvested: number;      // exact accounting
+  lowStockAt: number;         // alert threshold (default 2)
+  updatedAt?: any;
+}
+
+export interface ShopPurchase {
+  id: string;
+  itemId?: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  source?: string;            // Daraz / Alibaba / vendor
+  date: any;
+  monthKey: string;           // 'YYYY-MM'
+}
+
+export interface ShopOrder {
+  id: string;
+  itemId?: string;
+  name: string;
+  category?: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;        // unitPrice × quantity
+  courierReceived: number;    // customer se courier liya (default 0)
+  courierPaid: number;        // owner ne courier diya (default 0)
+  unitCost: number;           // frozen weighted-avg cost at order time
+  profit: number;             // totalAmount + courierReceived − unitCost×qty − courierPaid (±)
+  platform: ShopPlatform;
+  customerName?: string;
+  customerPhone?: string;
+  note?: string;
+  date: any;
+  monthKey: string;           // 'YYYY-MM'
+}

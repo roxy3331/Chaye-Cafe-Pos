@@ -1,10 +1,11 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Plus, Filter, Search, Receipt, Home, Zap, BadgeHelp, Fuel, MoreHorizontal, Save, Loader2 } from 'lucide-react';
+import { Plus, Filter, Search, Receipt, Home, Zap, BadgeHelp, Fuel, MoreHorizontal, Save, Loader2, Calendar } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { dataService } from '../services/dataService';
 import { useToast } from '../context/ToastContext';
+import { NumberTicker, FlipIn, ShimmerButton, ShimmerSweep } from '../components/magicui';
 
 const Icon = ({ cat }: { cat: string }) => {
   switch(cat) {
@@ -22,9 +23,14 @@ export const Expenses: React.FC = () => {
 
   React.useEffect(() => {
     const fetch = async () => {
-      const data = await dataService.getExpenses();
-      setExpenses(data || []);
-      setLoading(false);
+      try {
+        const data = await dataService.getExpenses();
+        setExpenses(data || []);
+      } catch {
+        setExpenses([]);
+      } finally {
+        setLoading(false);
+      }
     };
     fetch();
   }, []);
@@ -34,15 +40,17 @@ export const Expenses: React.FC = () => {
   return (
     <div className="space-y-8 pb-32 animate-in fade-in duration-700">
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 glass-card p-8 rounded-[32px] flex flex-col justify-between relative overflow-hidden">
+        <ShimmerSweep delay={0.2}>
+        <div className="md:col-span-2 glass-card p-8 rounded-[32px] flex flex-col justify-between">
           <div className="absolute -right-12 -top-12 w-48 h-48 bg-emerald-900/5 rounded-full blur-3xl" />
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-2 block">Total Expenses Recorded</span>
-          <h2 className="text-6xl font-bold text-emerald-900 tracking-tighter">{totalAmount.toLocaleString()}</h2>
+          <h2 className="text-6xl font-bold text-emerald-900 tracking-tighter"><NumberTicker value={totalAmount} /></h2>
           <div className="mt-8 flex items-center gap-2 text-emerald-600">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span className="text-sm font-bold">Live database summary</span>
           </div>
         </div>
+        </ShimmerSweep>
         <div className="bg-emerald-900 rounded-[32px] p-8 text-white shadow-2xl flex flex-col justify-between">
           <span className="text-[10px] font-bold text-white/50 uppercase mb-2">Operational Tip</span>
           <h2 className="text-4xl font-bold">Review Monthly</h2>
@@ -57,21 +65,35 @@ export const Expenses: React.FC = () => {
         <div className="space-y-4">
           {loading ? (
             <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-900" /></div>
-          ) : expenses.length > 0 ? expenses.map((expense) => (
-            <div key={expense.id} className="glass-card group hover:shadow-xl transition-all rounded-[32px] p-6 flex items-center justify-between">
-              <div className="flex items-center gap-5">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-900">
-                  <Icon cat={expense.category} />
+          ) : expenses.length > 0 ? expenses.map((expense, i) => (
+            <FlipIn key={expense.id} delay={Math.min(i * 0.06, 0.3)}>
+              <div className="glass-card group hover:shadow-xl transition-all rounded-[32px] p-6 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-900 shrink-0">
+                    <Icon cat={expense.category} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-emerald-950 truncate">{expense.category}</h4>
+                    <p className="text-sm text-slate-400 truncate">
+                      {expense.title} {expense.description ? `• ${expense.description}` : ''}
+                    </p>
+                    {/* Show the date the expense was recorded (server timestamp). */}
+                    {(() => {
+                      const d = expense.date?.toDate?.() || (expense.date ? new Date(expense.date) : null);
+                      if (!d) return null;
+                      return (
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      );
+                    })()}
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-bold text-emerald-950">{expense.category}</h4>
-                  <p className="text-sm text-slate-400">
-                    {expense.title} {expense.description ? `• ${expense.description}` : ''}
-                  </p>
-                </div>
+                {/* Use toLocaleString for consistency with the rest of the app (Dashboard/Reports show whole numbers). */}
+                <p className="text-2xl font-bold text-emerald-900 shrink-0">{Math.round(expense.amount || 0).toLocaleString()}</p>
               </div>
-              <p className="text-2xl font-bold text-emerald-900">{(expense.amount || 0).toFixed(2)}</p>
-            </div>
+            </FlipIn>
           )) : (
             <p className="text-slate-400 italic text-center py-20">No expenses recorded yet.</p>
           )}
@@ -151,13 +173,15 @@ export const AddExpense: React.FC = () => {
             <option>Others</option>
           </select>
         </div>
-        <button 
-          onClick={handleSave} 
+        <ShimmerButton
+          onClick={handleSave}
           disabled={loading}
-          className="w-full bg-emerald-900 text-white py-6 rounded-2xl font-bold text-xl active:scale-95 transition-all shadow-xl shadow-emerald-900/20 disabled:opacity-50"
+          background="rgba(2,44,34,1)"
+          borderRadius="16px"
+          className="w-full py-6 text-white font-bold text-xl disabled:opacity-50"
         >
           {loading ? 'Saving...' : 'Save Expense'}
-        </button>
+        </ShimmerButton>
       </div>
     </div>
   );

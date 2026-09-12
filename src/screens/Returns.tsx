@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { dataService } from '../services/dataService';
 import { ReturnEntry } from '../types';
+import { NumberTicker, BorderBeam, FlipIn } from '../components/magicui';
 
 export const Returns: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole = 'owner' }) => {
   const [returns, setReturns] = React.useState<ReturnEntry[]>([]);
@@ -39,24 +40,30 @@ export const Returns: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
 
       {/* ── Header Cards ── */}
       <section className="grid grid-cols-2 gap-4">
+        <FlipIn delay={0}>
         <div className="relative overflow-hidden rounded-3xl p-6 bg-orange-500 text-white">
+          <BorderBeam colorFrom="#fff" colorTo="#fed7aa" size={140} duration={8} borderWidth={1.5} />
           <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full" />
           <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center mb-3">
             <ArrowDownLeft className="w-5 h-5" />
           </div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70 mb-1">Customer Returns</p>
-          <h2 className="text-4xl font-bold tracking-tight">{totalCustomerReturns}</h2>
+          <h2 className="text-4xl font-bold tracking-tight"><NumberTicker value={totalCustomerReturns} /></h2>
           <p className="text-xs opacity-70 mt-1 font-medium">wapas aaye</p>
         </div>
+        </FlipIn>
+        <FlipIn delay={0.08}>
         <div className="relative overflow-hidden rounded-3xl p-6 bg-slate-800 text-white">
+          <BorderBeam colorFrom="#94a3b8" colorTo="#475569" size={140} duration={8} borderWidth={1.5} />
           <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full" />
           <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center mb-3">
             <ArrowUpRight className="w-5 h-5" />
           </div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70 mb-1">Supplier Returns</p>
-          <h2 className="text-4xl font-bold tracking-tight">{totalSupplierReturns}</h2>
+          <h2 className="text-4xl font-bold tracking-tight"><NumberTicker value={totalSupplierReturns} /></h2>
           <p className="text-xs opacity-70 mt-1 font-medium">wapas bheje</p>
         </div>
+        </FlipIn>
       </section>
 
       {/* ── Filters ── */}
@@ -133,7 +140,7 @@ export const Returns: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                       {/* Body */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-bold text-emerald-950 text-base">{ret.itemName}</p>
+                          <p className="font-bold text-emerald-950 text-base truncate">{ret.itemName}</p>
                           <span className={cn(
                             "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide",
                             isCustomer ? "bg-orange-100 text-orange-600" : "bg-slate-100 text-slate-600"

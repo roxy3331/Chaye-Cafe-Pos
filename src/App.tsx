@@ -4,21 +4,31 @@ import { auth, db } from './lib/firebase';
 import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { Layout } from './components/Layout';
-import { Dashboard } from './screens/Dashboard';
-import { Stock } from './screens/Stock';
-import { Purchase } from './screens/Purchase';
-import { Expenses, AddExpense } from './screens/Expenses';
-import { Reports } from './screens/Reports';
-import { Settings } from './screens/Settings';
-import { ShareReport } from './screens/ShareReport';
-import { Vendors } from './screens/Vendors';
-import { Login } from './screens/Login';
-import { OpeningStock } from './screens/OpeningStock';
-import { Khata } from './screens/Khata';
-import { KhataDetail } from './screens/KhataDetail';
-import { Returns } from './screens/Returns';
 import { ToastProvider } from './context/ToastContext';
 import { dataService } from './services/dataService';
+
+const Dashboard    = React.lazy(() => import('./screens/Dashboard').then(m => ({ default: m.Dashboard })));
+const Stock        = React.lazy(() => import('./screens/Stock').then(m => ({ default: m.Stock })));
+const Purchase     = React.lazy(() => import('./screens/Purchase').then(m => ({ default: m.Purchase })));
+const Expenses     = React.lazy(() => import('./screens/Expenses').then(m => ({ default: m.Expenses })));
+const AddExpense   = React.lazy(() => import('./screens/Expenses').then(m => ({ default: m.AddExpense })));
+const Reports      = React.lazy(() => import('./screens/Reports').then(m => ({ default: m.Reports })));
+const Settings     = React.lazy(() => import('./screens/Settings').then(m => ({ default: m.Settings })));
+const ShareReport  = React.lazy(() => import('./screens/ShareReport').then(m => ({ default: m.ShareReport })));
+const Vendors      = React.lazy(() => import('./screens/Vendors').then(m => ({ default: m.Vendors })));
+const Login        = React.lazy(() => import('./screens/Login').then(m => ({ default: m.Login })));
+const OpeningStock = React.lazy(() => import('./screens/OpeningStock').then(m => ({ default: m.OpeningStock })));
+const Khata        = React.lazy(() => import('./screens/Khata').then(m => ({ default: m.Khata })));
+const KhataDetail  = React.lazy(() => import('./screens/KhataDetail').then(m => ({ default: m.KhataDetail })));
+const Returns      = React.lazy(() => import('./screens/Returns').then(m => ({ default: m.Returns })));
+const Pubg         = React.lazy(() => import('./screens/Pubg').then(m => ({ default: m.Pubg })));
+const Shop         = React.lazy(() => import('./screens/Shop').then(m => ({ default: m.Shop })));
+
+const PageLoader = () => (
+  <div className="min-h-[60vh] flex items-center justify-center">
+    <div className="w-8 h-8 border-4 border-emerald-900/10 border-t-emerald-900 rounded-full animate-spin" />
+  </div>
+);
 
 export default function App() {
   const [user, setUser] = React.useState<{ role: 'owner' | 'employee' } | null>(() => {
@@ -77,26 +87,48 @@ export default function App() {
         const lastRecorded = await dataService.getLastRecordedMonth();
 
         if (lastRecorded && lastRecorded !== currentMonthKey) {
-          const [ly, lm] = lastRecorded.split('-').map(Number);
-          const prevMonthStart = new Date(ly, lm - 1, 1, 0, 0, 0, 0);
-          const prevMonthEnd = new Date(ly, lm, 1, 0, 0, 0, 0);
+          // Fetch sales + expenses ONCE, then compute + save NET profit for EVERY
+          // missed month between lastRecorded and currentMonth (not just the first).
+          const [sales, expenses] = await Promise.all([
+            dataService.getSales(),
+            dataService.getExpenses(),
+          ]);
 
-          const sales = await new Promise<any[]>((resolve) => {
-            const unsub = dataService.subscribeToSales((data) => {
-              unsub();
-              resolve(data);
+          const tsOf = (v: any): number | null => {
+            if (!v) return null;
+            const d = v.toDate?.() ?? (v.seconds != null ? new Date(v.seconds * 1000) : new Date(v));
+            const t = d.getTime();
+            return Number.isFinite(t) ? t : null;
+          };
+
+          // Walk forward month-by-month from lastRecorded up to (but not including) current month.
+          let [ly, lm] = lastRecorded.split('-').map(Number);
+          const safetyCap = 24; // guard against runaway loop
+          let iter = 0;
+          while (iter < safetyCap) {
+            iter++;
+            const monthStart = new Date(ly, lm - 1, 1, 0, 0, 0, 0);
+            const monthEnd = new Date(ly, lm, 1, 0, 0, 0, 0);
+            const monthKey = `${ly}-${String(lm).padStart(2, '0')}`;
+
+            const inMonth = (items: any[]) => items.filter(i => {
+              const t = tsOf(i.date);
+              return t !== null && t >= monthStart.getTime() && t < monthEnd.getTime();
             });
-          });
 
-          const prevMonthProfit = sales
-            .filter(s => {
-              const d = s.date?.toDate?.();
-              return d && d >= prevMonthStart && d < prevMonthEnd;
-            })
-            .reduce((acc, s) => acc + (s.profit || 0), 0);
+            const monthGross = inMonth(sales).reduce((acc, s) => acc + (s.profit || 0), 0);
+            const monthExpenses = inMonth(expenses).reduce((acc, e) => acc + (e.amount || 0), 0);
+            const monthNet = monthGross - monthExpenses;
 
-          const monthLabel = prevMonthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-          await dataService.saveMonthlyProfit(lastRecorded, prevMonthProfit, monthLabel);
+            const monthLabel = monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            await dataService.saveMonthlyProfit(monthKey, monthNet, monthLabel, monthGross, monthExpenses);
+
+            // Advance to next month
+            lm++;
+            if (lm > 12) { lm = 1; ly++; }
+            const nextKey = `${ly}-${String(lm).padStart(2, '0')}`;
+            if (nextKey === currentMonthKey) break;
+          }
         }
 
         await dataService.setLastRecordedMonth(currentMonthKey);
@@ -127,30 +159,38 @@ export default function App() {
   };
 
   if (!user) {
-    return <Login onLogin={(role) => setUser({ role })} />;
+    return (
+      <React.Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-emerald-50"><div className="w-10 h-10 border-4 border-emerald-900/10 border-t-emerald-900 rounded-full animate-spin" /></div>}>
+        <Login onLogin={(role) => setUser({ role })} />
+      </React.Suspense>
+    );
   }
 
   return (
     <Router>
       <ToastProvider>
         <Layout userRole={user.role} onLogout={handleLogout}>
-          <Routes>
-            <Route path="/" element={<Dashboard userRole={user.role} />} />
-            <Route path="/purchase" element={<Purchase userRole={user.role} />} />
-            <Route path="/stock" element={<Stock userRole={user.role} />} />
-            <Route path="/reports" element={user.role === 'owner' ? <Reports /> : <Navigate to="/" />} />
-            <Route path="/reports/share" element={user.role === 'owner' ? <ShareReport /> : <Navigate to="/" />} />
-            <Route path="/expenses" element={user.role === 'owner' ? <Expenses /> : <Navigate to="/" />} />
-            <Route path="/expenses/add" element={user.role === 'owner' ? <AddExpense /> : <Navigate to="/" />} />
-            <Route path="/opening-stock" element={<OpeningStock />} />
-            <Route path="/vendors" element={<Vendors userRole={user.role} />} />
-            <Route path="/khata" element={<Khata userRole={user.role} />} />
-            <Route path="/khata/:customerId" element={<KhataDetail userRole={user.role} />} />
-            <Route path="/returns" element={<Returns userRole={user.role} />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/analytics" element={user.role === 'owner' ? <Reports /> : <Navigate to="/" />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <React.Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<Dashboard userRole={user.role} />} />
+              <Route path="/purchase" element={<Purchase userRole={user.role} />} />
+              <Route path="/stock" element={<Stock userRole={user.role} />} />
+              <Route path="/reports" element={user.role === 'owner' ? <Reports /> : <Navigate to="/" />} />
+              <Route path="/reports/share" element={user.role === 'owner' ? <ShareReport /> : <Navigate to="/" />} />
+              <Route path="/expenses" element={user.role === 'owner' ? <Expenses /> : <Navigate to="/" />} />
+              <Route path="/expenses/add" element={user.role === 'owner' ? <AddExpense /> : <Navigate to="/" />} />
+              <Route path="/opening-stock" element={<OpeningStock />} />
+              <Route path="/vendors" element={<Vendors userRole={user.role} />} />
+              <Route path="/khata" element={<Khata userRole={user.role} />} />
+              <Route path="/khata/:customerId" element={<KhataDetail userRole={user.role} />} />
+              <Route path="/returns" element={<Returns userRole={user.role} />} />
+              <Route path="/pubg" element={user.role === 'owner' ? <Pubg userRole={user.role} /> : <Navigate to="/" />} />
+              <Route path="/shop" element={user.role === 'owner' ? <Shop userRole={user.role} /> : <Navigate to="/" />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/analytics" element={user.role === 'owner' ? <Reports /> : <Navigate to="/" />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </React.Suspense>
         </Layout>
       </ToastProvider>
     </Router>

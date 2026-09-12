@@ -5,6 +5,8 @@ import { cn } from '../lib/utils';
 import { dataService } from '../services/dataService';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
+import { ShimmerButton, Meteors, BorderBeam, BlurFade } from '../components/magicui';
+import { searchList, normalizeText } from '../lib/search';
 
 export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole = 'owner' }) => {
   const navigate = useNavigate();
@@ -17,6 +19,9 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
   const [pcsPerPack, setPcsPerPack] = React.useState('1'); 
   const [remainingUnits, setRemainingUnits] = React.useState('0');
   const [expiryDate, setExpiryDate] = React.useState('');
+  // Default to today's date (YYYY-MM-DD) so the user sees when the stock was added,
+  // and can adjust if entering a back-dated supply.
+  const [purchaseDate, setPurchaseDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [selectedUnitCat, setSelectedUnitCat] = React.useState<'bottles' | 'snacks' | 'biscuits' | 'cigarettes' | 'velo' | 'custom'>('custom');
   const [showPackagingPicker, setShowPackagingPicker] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -51,12 +56,13 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
 
   const handleSearch = (name: string) => {
     setItemName(name);
-    const cleanName = name.toLowerCase().trim();
+    const cleanName = normalizeText(name);
     if (!cleanName) {
       setFoundItem(null);
       return;
     }
-    const item = existingItems.find(i => i.name.toLowerCase().trim() === cleanName);
+    // Normalized exact match — "coca cola", "Coca-Cola", " coca cola " sab same item milenge
+    const item = existingItems.find(i => normalizeText(i.name) === cleanName);
     if (item) {
       setFoundItem(item);
       setCategory(item.category || '🏷️ Other');
@@ -69,11 +75,12 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
     }
   };
 
-  const suggestions = itemName.length > 0 && !foundItem 
-    ? existingItems.filter(i => i.name.toLowerCase().includes(itemName.toLowerCase())).slice(0, 5)
+  // Ranked fuzzy suggestions — hyphen/bracket/space + word-order agnostic, best matches first
+  const suggestions = itemName.trim().length > 0 && !foundItem
+    ? searchList(itemName, existingItems as any[], i => i.name, 8)
     : [];
 
-  const totalNewPcs = parseInt(newQuantity || '0') * parseInt(pcsPerPack || '0');
+  const totalNewPcs = (parseInt(newQuantity || '0') || 0) * (parseInt(pcsPerPack || '0') || 0);
   
   const unitOptions = {
     bottles: [
@@ -101,11 +108,11 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
     ]
   };
 
-  const existingStock = foundItem ? foundItem.stock : 0; 
-  const currentPcsPerPack = foundItem ? (foundItem.pcsPerPack || 1) : parseInt(pcsPerPack || '1');
-  const soldPcs = Math.max(0, existingStock - parseInt(remainingUnits || '0'));
+  const existingStock = foundItem ? (foundItem.stock ?? 0) : 0;
+  const currentPcsPerPack = foundItem ? (foundItem.pcsPerPack || 1) : (parseInt(pcsPerPack || '1') || 1);
+  const soldPcs = Math.max(0, existingStock - (parseInt(remainingUnits || '0') || 0));
   const soldUnitsCount = soldPcs / currentPcsPerPack;
-  const totalNewStockTotal = parseInt(remainingUnits || '0') + totalNewPcs;
+  const totalNewStockTotal = (parseInt(remainingUnits || '0') || 0) + totalNewPcs;
 
   const handleFinalize = async () => {
     if (!itemName || !purchasePrice || !salePrice) {
@@ -121,8 +128,13 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
       const sanitizedBuyPrice = parseFloat(purchasePrice || '0') || 0;
       const sanitizedSellPrice = parseFloat(salePrice || '0') || 0;
 
+      // Canonical-name guard: agar same item spelling-variant se milta hai (jaise
+      // "coca-cola" vs "coca cola") to stock mein NAYA duplicate item banega.
+      // existing ka naam use karte hain taake stock merge ho.
+      const canonical = existingItems.find(i => normalizeText(i.name) === normalizeText(itemName));
+
       await dataService.addPurchase({
-        itemName,
+        itemName: canonical ? canonical.name : itemName,
         category,
         quantity: sanitizedQty,
         pcsPerPack: sanitizedPcsPerPack,
@@ -134,11 +146,13 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
         orderBookerName,
         orderBookerPhone,
         remainingUnits: sanitizedRemaining,
+        purchaseDate, // user-visible date (default today, editable)
         ...(expiryDate ? { expiryDate } : {}),
       });
       if (salesmanName || salesmanPhone || orderBookerName || orderBookerPhone) {
         await dataService.addOrUpdateVendorFromPurchase({
-          companyName: itemName,
+          // Vendor name should be the salesman/company — NOT the item being bought.
+          companyName: salesmanName || orderBookerName || 'Unknown Vendor',
           salesmanName: salesmanName || undefined,
           salesmanPhone: salesmanPhone || undefined,
           orderBookerName: orderBookerName || undefined,
@@ -344,6 +358,19 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
               </div>
             </div>
 
+            {/* Purchase Date — defaults to today, editable for back-dated entries */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
+                Purchase Date <span className="normal-case font-medium text-slate-400">(default: aaj)</span>
+              </label>
+              <input
+                type="date"
+                value={purchaseDate}
+                onChange={(e) => setPurchaseDate(e.target.value)}
+                className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-base font-bold text-emerald-900 focus:ring-2 focus:ring-emerald-900/5 outline-none"
+              />
+            </div>
+
             {/* Expiry Date */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
@@ -461,10 +488,11 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
                   value={salesmanName}
                   onChange={(e) => setSalesmanName(e.target.value)}
                 />
-                <input 
-                  type="text" 
-                  placeholder="Salesman Phone" 
-                  className="w-full bg-emerald-50/30 border-none rounded-xl py-4 px-5 text-emerald-900 outline-none font-bold" 
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="Salesman Phone"
+                  className="w-full bg-emerald-50/30 border-none rounded-xl py-4 px-5 text-emerald-900 outline-none font-bold"
                   value={salesmanPhone}
                   onChange={(e) => setSalesmanPhone(e.target.value)}
                 />
@@ -477,10 +505,11 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
                   value={orderBookerName}
                   onChange={(e) => setOrderBookerName(e.target.value)}
                 />
-                <input 
-                  type="text" 
-                  placeholder="Order Booker Phone" 
-                  className="w-full bg-emerald-50/30 border-none rounded-xl py-4 px-5 text-emerald-900 outline-none font-bold" 
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="Order Booker Phone"
+                  className="w-full bg-emerald-50/30 border-none rounded-xl py-4 px-5 text-emerald-900 outline-none font-bold"
                   value={orderBookerPhone}
                   onChange={(e) => setOrderBookerPhone(e.target.value)}
                 />
@@ -492,10 +521,12 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
         {/* 5. Summary & Action */}
         <div className="lg:col-span-4 space-y-6">
           <section className="glass-card rounded-[40px] overflow-hidden border-none shadow-2xl backdrop-blur-3xl sticky top-24">
-            <div className="bg-emerald-900 p-10 text-white space-y-2">
-              <p className="text-[10px] font-bold text-emerald-100/50 uppercase tracking-[0.2em]">Summary Preview</p>
-              <h3 className="text-3xl font-black tracking-tight">{itemName || 'New Item'}</h3>
-              <p className="text-xs font-bold bg-white/10 w-fit px-3 py-1 rounded-full">{category}</p>
+            <div className="bg-emerald-900 p-10 text-white space-y-2 relative overflow-hidden">
+              <BorderBeam colorFrom="#6ee7b7" colorTo="#34d399" size={180} duration={8} borderWidth={1.5} />
+              <Meteors number={8} />
+              <p className="text-[10px] font-bold text-emerald-100/50 uppercase tracking-[0.2em] relative z-10">Summary Preview</p>
+              <h3 className="text-3xl font-black tracking-tight relative z-10">{itemName || 'New Item'}</h3>
+              <p className="text-xs font-bold bg-white/10 w-fit px-3 py-1 rounded-full relative z-10">{category}</p>
             </div>
             
             <div className="p-8 space-y-6 bg-white/40">
@@ -509,7 +540,9 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
                   {userRole === 'owner' && (
                     <div className="flex justify-between text-sm py-1 border-t border-emerald-100/50 mt-1 font-bold">
                       <span className="text-slate-500">Old Batch Profit:</span>
-                      <span className="text-emerald-600">+{((soldUnitsCount * (parseFloat(salePrice) || 0)) - (soldUnitsCount * (foundItem.averageBuy || 0))).toLocaleString()}</span>
+                      {/* Uses the OLD currentSell (not the new price being typed) because
+                          addPurchase records the sale at the OLD price — preview must match. */}
+                      <span className="text-emerald-600">+{((soldUnitsCount * (foundItem.currentSell || 0)) - (soldUnitsCount * (foundItem.averageBuy || 0))).toLocaleString()}</span>
                     </div>
                   )}
                 </div>
@@ -520,7 +553,7 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
                   <div className="space-y-1">
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Incoming Stock</p>
                     <p className="text-xl font-black text-emerald-950">
-                      +{newQuantity} {parseInt(pcsPerPack) > 1 ? 'Units' : 'Pcs'}
+                      +{newQuantity} {(parseInt(pcsPerPack) || 1) > 1 ? 'Units' : 'Pcs'}
                       <span className="text-[10px] block opacity-50">Total: {totalNewPcs} pcs</span>
                     </p>
                   </div>
@@ -528,7 +561,7 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
                   <div className="space-y-1 text-right">
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Final stock total</p>
                     <p className="text-xl font-black text-emerald-900">
-                      {Math.floor(totalNewStockTotal / parseInt(pcsPerPack || '1'))} Units
+                      {Math.floor(totalNewStockTotal / (parseInt(pcsPerPack || '1') || 1))} Units
                       <span className="text-[10px] block opacity-50">Total {totalNewStockTotal} pcs</span>
                     </p>
                   </div>
@@ -558,14 +591,16 @@ export const Purchase: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRo
                 </div>
               </div>
 
-              <button 
+              <ShimmerButton
                 onClick={handleFinalize}
                 disabled={loading}
-                className="w-full bg-emerald-900 text-white rounded-3xl py-6 font-black text-xl flex items-center justify-center gap-3 active:scale-95 transition-all shadow-2xl shadow-emerald-950/30 disabled:opacity-50"
+                background="rgba(2,44,34,1)"
+                borderRadius="24px"
+                className="w-full py-6 text-white font-black text-xl disabled:opacity-50"
               >
                 <CheckCircle className="w-8 h-8" />
                 {loading ? 'ADDING...' : 'ADD TO STOCK'}
-              </button>
+              </ShimmerButton>
             </div>
           </section>
         </div>

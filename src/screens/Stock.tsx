@@ -6,6 +6,8 @@ import { StockItem } from '../types';
 import { dataService } from '../services/dataService';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
+import { NumberTicker, FlipIn, ShimmerSweep } from '../components/magicui';
+import { searchList } from '../lib/search';
 
 // ── Expiry helpers ─────────────────────────────────────────────────────────────
 function getExpiryStatus(expiryDate?: string) {
@@ -50,6 +52,7 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
   const [returnQty, setReturnQty] = React.useState('');
   const [returnReason, setReturnReason] = React.useState('');
   const [returnSaving, setReturnSaving] = React.useState(false);
+  const [deleteConfirm, setDeleteConfirm] = React.useState<{ id: string; name: string } | null>(null);
 
   React.useEffect(() => {
     let timeout: any;
@@ -93,15 +96,40 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
     }
     setEditSaving(true);
     try {
+      const newAverageBuy = parseFloat(editBuyPrice) || 0;
+      const newCurrentSell = parseFloat(editSellPrice) || 0;
+      const newPcsPerPack = parseInt(editPcsPerPack) || 1;
+      const newStock = editStock !== '' ? (parseInt(editStock) || 0) : (editItem.stock || 0);
+      const oldStock = editItem.stock || 0;
+
       const updates: any = {
         name: editName.trim(),
-        averageBuy: parseFloat(editBuyPrice) || 0,
-        currentSell: parseFloat(editSellPrice) || 0,
+        averageBuy: newAverageBuy,
+        currentSell: newCurrentSell,
         category: editCategory.trim() || 'General',
-        pcsPerPack: parseInt(editPcsPerPack) || 1,
+        pcsPerPack: newPcsPerPack,
       };
-      if (editStock !== '') updates.stock = parseInt(editStock) || 0;
-      await dataService.updateStock(editItem.id, updates);
+
+      // If stock decreased, record a sale for the difference so profit is counted
+      // (same as Close Batch). Use the just-edited prices since they reflect current pricing.
+      // recordStockReduction handles the stock update atomically with the sale.
+      if (editStock !== '' && newStock < oldStock) {
+        await dataService.recordStockReduction({
+          id: editItem.id,
+          name: editName.trim() || editItem.name,
+          stock: oldStock,
+          pcsPerPack: newPcsPerPack,
+          averageBuy: newAverageBuy,
+          currentSell: newCurrentSell,
+          type: editItem.type,
+        }, newStock);
+        // Still persist the non-stock field edits (name/prices/category/pcsPerPack).
+        await dataService.updateStock(editItem.id, updates);
+      } else {
+        if (editStock !== '') updates.stock = newStock;
+        await dataService.updateStock(editItem.id, updates);
+      }
+
       showToast('Item updated!', 'success');
       setShowEditModal(false);
     } catch (e) {
@@ -111,14 +139,23 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
     }
   };
 
-  const handleDelete = async (id: string, itemName: string) => {
+  const handleDelete = (id: string, itemName: string) => {
     if (userRole !== 'owner') {
       showToast('Only owners can delete stock items.', 'warning');
       return;
     }
-    if (window.confirm(`"${itemName}" permanently delete karna chahte ho?`)) {
-      await dataService.deleteStock(id);
-      await dataService.addStockAlert({ alertType: 'stock_delete', itemName, performedBy: userRole });
+    setDeleteConfirm({ id, name: itemName });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    try {
+      await dataService.deleteStock(deleteConfirm.id);
+      await dataService.addStockAlert({ alertType: 'stock_delete', itemName: deleteConfirm.name, performedBy: userRole });
+      showToast('Item deleted', 'success');
+      setDeleteConfirm(null);
+    } catch {
+      showToast('Delete failed', 'error');
     }
   };
 
@@ -155,14 +192,27 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
     }
   };
 
-  const filteredItems = items.filter(item => 
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredItems = React.useMemo(() =>
+    searchTerm.trim()
+      ? searchList(searchTerm, items as any[], i => i.name, 100)
+      : items, [items, searchTerm]);
 
-  const totalAssets = items.reduce((acc, item) => acc + ((item.stock / (item.pcsPerPack || 1)) * (item.averageBuy || 0)), 0);
-  const totalStockItems = items.reduce((acc, item) => acc + Math.floor(item.stock / (item.pcsPerPack || 1)), 0);
-  const potentialProfit = items.reduce((acc, item) => acc + ((item.stock / (item.pcsPerPack || 1)) * ((item.currentSell || 0) - (item.averageBuy || 0))), 0);
-  const totalStockValue = items.reduce((acc, item) => acc + ((item.stock || 0) / (item.pcsPerPack || 1)) * (item.averageBuy || 0), 0);
+  // Memoized so these only recompute when items change, not on every keystroke/render.
+  // All `item.stock` accesses are guarded so one bad doc can't poison the totals with NaN.
+  const { totalAssets, totalStockItems, potentialProfit, totalStockValue } = React.useMemo(() => {
+    let totalAssets = 0, totalStockItems = 0, potentialProfit = 0, totalStockValue = 0;
+    for (const item of items) {
+      const stock = item.stock || 0;
+      const pcsPerPack = item.pcsPerPack || 1;
+      const avgBuy = item.averageBuy || 0;
+      const boxes = stock / pcsPerPack;
+      totalAssets += boxes * avgBuy;
+      totalStockItems += Math.floor(boxes);
+      potentialProfit += boxes * ((item.currentSell || 0) - avgBuy);
+      totalStockValue += boxes * avgBuy;
+    }
+    return { totalAssets, totalStockItems, potentialProfit, totalStockValue };
+  }, [items]);
 
   const groupedByCategory = React.useMemo(() => {
     const groups: Record<string, { items: any[]; stock: number; boxes: number; value: number }> = {};
@@ -209,42 +259,37 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
       {/* Stats Bento - ONLY FOR OWNER */}
       {userRole === 'owner' && (
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="glass-card p-6 rounded-3xl flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Total Assets</p>
-              <p className="text-3xl font-bold text-emerald-900">{totalAssets.toLocaleString()}</p>
-            </div>
-            <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-900">
-              <Wallet className="w-6 h-6" />
-            </div>
-          </div>
-          <div className="glass-card p-6 rounded-3xl flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Items in Stock</p>
-              <p className="text-3xl font-bold text-emerald-900">{totalStockItems.toLocaleString()}</p>
-            </div>
-            <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-900">
-              <Package className="w-6 h-6" />
-            </div>
-          </div>
-          <div className="glass-card p-6 rounded-3xl flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Potential Profit</p>
-              <p className="text-3xl font-bold text-emerald-500">+{potentialProfit.toLocaleString()}</p>
-            </div>
-            <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-500">
-              <TrendingUp className="w-6 h-6" />
-            </div>
-          </div>
+          {[{
+            label: 'Total Assets', value: totalAssets, icon: <Wallet className="w-6 h-6" />, prefix: '', color: 'text-emerald-900'
+          },{
+            label: 'Items in Stock', value: totalStockItems, icon: <Package className="w-6 h-6" />, prefix: '', color: 'text-emerald-900'
+          },{
+            label: 'Potential Profit', value: potentialProfit, icon: <TrendingUp className="w-6 h-6" />, prefix: '+', color: 'text-emerald-500'
+          }].map((s, i) => (
+            <FlipIn key={s.label} delay={i * 0.08}>
+              <ShimmerSweep delay={0.3 + i * 0.1}>
+                <div className="glass-card p-6 rounded-3xl flex justify-between items-center">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{s.label}</p>
+                    <p className={`text-3xl font-bold ${s.color}`}>{s.prefix}<NumberTicker value={s.value} /></p>
+                  </div>
+                  <div className={`w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center ${s.color}`}>
+                    {s.icon}
+                  </div>
+                </div>
+              </ShimmerSweep>
+            </FlipIn>
+          ))}
         </section>
       )}
 
       {/* Category Summary */}
       <section className="space-y-4">
+        <ShimmerSweep delay={0.5}>
         <div className="glass-card rounded-3xl p-6 flex flex-wrap gap-4 items-center justify-between">
           <div>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Purchase Cost (All Stock)</p>
-            <p className="text-3xl font-bold text-emerald-900">Rs {totalStockValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+            <p className="text-3xl font-bold text-emerald-900">Rs <NumberTicker value={Math.round(totalStockValue)} /></p>
           </div>
           <div className="flex flex-wrap gap-3">
             {groupedByCategory.map(([category, summary]) => (
@@ -264,6 +309,7 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
             ))}
           </div>
         </div>
+        </ShimmerSweep>
       </section>
 
       {/* Stock List by Category */}
@@ -398,14 +444,21 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
                   <button
                     onClick={async () => {
                       const prevStock = selectedItem.stock;
-                      await dataService.updateStock(selectedItem.id, { stock: 0 });
-                      await dataService.addStockAlert({
-                        alertType: 'stock_zero',
-                        itemName: selectedItem.name,
-                        previousStock: prevStock,
-                        performedBy: userRole,
-                      });
-                      setShowModal(false);
+                      try {
+                        // Record a sale for the sold-out stock so profit is actually counted
+                        // (previously this only zeroed the count and lost the profit).
+                        await dataService.recordStockReduction(selectedItem, 0);
+                        await dataService.addStockAlert({
+                          alertType: 'stock_zero',
+                          itemName: selectedItem.name,
+                          previousStock: prevStock,
+                          performedBy: userRole,
+                        });
+                        showToast('Stock set to zero', 'success');
+                        setShowModal(false);
+                      } catch {
+                        showToast('Update failed', 'error');
+                      }
                     }}
                     className="py-5 bg-red-600 text-white rounded-2xl font-bold shadow-xl shadow-red-900/20 active:scale-95 transition-all"
                   >
@@ -420,7 +473,7 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
       {/* Edit Item Modal */}
       <AnimatePresence>
         {showEditModal && editItem && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -429,10 +482,11 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
               onClick={() => setShowEditModal(false)}
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-md glass-card rounded-[40px] p-8 shadow-2xl space-y-6"
+              initial={{ opacity: 0, y: '100%' }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="relative w-full max-w-md glass-card rounded-t-[40px] sm:rounded-[40px] p-6 sm:p-8 shadow-2xl space-y-6 max-h-[92vh] overflow-y-auto"
             >
               <button
                 onClick={() => setShowEditModal(false)}
@@ -649,6 +703,51 @@ export const Stock: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole 
           </>
         )}
       </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-emerald-950/40 backdrop-blur-sm z-[80]"
+              onClick={() => setDeleteConfirm(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+            >
+              <div className="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl text-center space-y-5">
+                <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto">
+                  <Trash2 className="w-8 h-8 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-emerald-900">Delete Karo?</h3>
+                  <p className="text-slate-500 text-sm mt-2">
+                    "<span className="font-bold text-emerald-900">{deleteConfirm.name}</span>" permanently delete ho jayega. Yeh undo nahi hoga.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDeleteConfirm(null)}
+                    className="flex-1 py-3 rounded-2xl border border-emerald-100 text-slate-600 font-bold hover:bg-emerald-50 transition-colors"
+                  >
+                    Raho
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    className="flex-1 py-3 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-colors"
+                  >
+                    Haan, Delete
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -689,6 +788,17 @@ const StockCard: React.FC<{ item: any; userRole: string; onCloseBatch: () => voi
             {item.stock === 0 ? 'Out of Stock' : (item.stock < 10 ? 'Low Stock' : item.category || 'General')}
           </span>
           <span className="text-xs font-medium text-slate-400">Batch #{item.batchNumber || 'N/A'}</span>
+          {/* Show when this stock was last updated/added. */}
+          {(() => {
+            const ts = item.updatedAt || item.lastPurchaseDate;
+            const d = ts?.toDate?.() ?? (ts ? new Date(ts) : null);
+            if (!d) return null;
+            return (
+              <span className="text-xs font-medium text-slate-400">
+                · {d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short', year: '2-digit' })}
+              </span>
+            );
+          })()}
         </div>
       </div>
       <div className="flex flex-col items-end gap-2">

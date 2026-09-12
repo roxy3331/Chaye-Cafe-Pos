@@ -1,10 +1,11 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { TrendingUp, Wallet, Package, BarChart3, PlusCircle, ShoppingCart, Receipt, Trophy, Clock, BookOpen, CalendarClock } from 'lucide-react';
+import { TrendingUp, Wallet, Package, BarChart3, PlusCircle, ShoppingCart, Receipt, Trophy, Clock, BookOpen, CalendarClock, Gamepad2, ShoppingBag, Coffee } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { cn } from '../lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { dataService } from '../services/dataService';
+import { NumberTicker, BorderBeam, Meteors, ShimmerButton, FlipIn, ShimmerSweep } from '../components/magicui';
 
 export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole = 'owner' }) => {
   const navigate = useNavigate();
@@ -22,7 +23,24 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
   const [khataStats, setKhataStats] = React.useState({ totalOutstanding: 0, customersCount: 0 });
   const [expiryItems, setExpiryItems] = React.useState<any[]>([]);
 
+  // PUBG + Online Shop profits for the owner "Business Summary" row
+  const [bizStats, setBizStats] = React.useState({ pubgToday: 0, pubgMonth: 0, shopToday: 0, shopMonth: 0 });
+  // Stock context for the same row — invested paisa + item count (taake card kabhi
+  // "khaali" na lage jab tak sale na ho)
+  const [bizItems, setBizItems] = React.useState({ pubgInvested: 0, pubgCount: 0, shopInvested: 0, shopCount: 0 });
+
   const stockItemsRef = React.useRef<any[]>([]);
+  // Track which item names sold in the last 7 days, so the stock callback can also
+  // compute "slow items" even if sales hasn't fired yet (subscription order isn't guaranteed).
+  const soldLast7DaysRef = React.useRef<Set<string>>(new Set());
+
+  // Compute "slow items" (in stock but not sold in 7 days) from whichever data we have.
+  const recomputeSlowItems = () => {
+    const slow = (stockItemsRef.current || [])
+      .filter(item => (item.stock || 0) > 0 && !soldLast7DaysRef.current.has(item.name))
+      .slice(0, 5);
+    setSlowItems(slow);
+  };
 
   React.useEffect(() => {
     const unsubscribeStock = dataService.subscribeToStock((items) => {
@@ -44,6 +62,10 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
         .filter(item => item.diffDays <= 7)
         .sort((a, b) => a.diffDays - b.diffDays);
       setExpiryItems(expiring);
+
+      // Recompute slow items here too — fixes the case where stock loads after sales,
+      // which previously left "7 Din Se Nahi Bika" empty on first paint.
+      recomputeSlowItems();
 
       setLoading(false);
     });
@@ -73,14 +95,19 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
         if (saleDate >= sevenDaysAgo) soldLast7Days.add(name);
       });
 
-      // Items in stock but not sold in last 7 days
-      const slow = (stockItemsRef.current || [])
-        .filter(item => (item.stock || 0) > 0 && !soldLast7Days.has(item.name))
-        .slice(0, 5);
-      setSlowItems(slow);
+      // Store for the stock callback's use, then recompute slow items from current data.
+      soldLast7DaysRef.current = soldLast7Days;
+      recomputeSlowItems();
 
       const top5 = Object.entries(itemMap)
-        .map(([name, d]) => ({ name: name.length > 12 ? name.slice(0, 12) + '…' : name, units: d.units, profit: d.profit }))
+        // Round units to 1 decimal (matches Reports) and drop items with net-negative
+        // units (e.g. customer returns) so they don't render as negative bars.
+        .map(([name, d]) => ({
+          name: name.length > 12 ? name.slice(0, 12) + '…' : name,
+          units: Math.round(d.units * 10) / 10,
+          profit: d.profit,
+        }))
+        .filter(d => d.units > 0)
         .sort((a, b) => b.units - a.units)
         .slice(0, 5);
 
@@ -100,10 +127,59 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
       setKhataStats({ totalOutstanding, customersCount });
     });
 
+    // PUBG sales profit (owner Business Summary)
+    const unsubPubg = dataService.subscribeToPubgSales((salesList) => {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+      let t = 0, m = 0;
+      salesList.forEach((s: any) => {
+        const d = s.date?.toDate?.(); if (!d) return;
+        const p = Number(s.profit) || 0;
+        if (d >= todayStart) t += p;
+        if (d >= monthStart) m += p;
+      });
+      setBizStats(prev => ({ ...prev, pubgToday: t, pubgMonth: m }));
+    });
+
+    // Online Shop orders profit (owner Business Summary)
+    const unsubShop = dataService.subscribeToShopOrders((ordersList) => {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+      let t = 0, m = 0;
+      ordersList.forEach((o: any) => {
+        const d = o.date?.toDate?.(); if (!d) return;
+        const p = Number(o.profit) || 0;
+        if (d >= todayStart) t += p;
+        if (d >= monthStart) m += p;
+      });
+      setBizStats(prev => ({ ...prev, shopToday: t, shopMonth: m }));
+    });
+
+    // PUBG + Shop stock context (invested + item count) for the Business Summary cards
+    const unsubPubgItems = dataService.subscribeToPubgItems((pubgItems) => {
+      setBizItems(prev => ({
+        ...prev,
+        pubgInvested: pubgItems.reduce((a: number, i: any) => a + (Number(i.totalInvested) || 0), 0),
+        pubgCount: pubgItems.length,
+      }));
+    });
+
+    const unsubShopItems = dataService.subscribeToShopItems((shopItems) => {
+      setBizItems(prev => ({
+        ...prev,
+        shopInvested: shopItems.reduce((a: number, i: any) => a + (Number(i.totalInvested) || 0), 0),
+        shopCount: shopItems.length,
+      }));
+    });
+
     return () => {
       unsubscribeStock();
       unsubscribeSales();
       unsubKhata();
+      unsubPubg();
+      unsubShop();
+      unsubPubgItems();
+      unsubShopItems();
     };
   }, []);
 
@@ -111,84 +187,137 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
 
   return (
     <div className="space-y-5 animate-in fade-in duration-700 pb-4">
-      {/* Hero Welcome — compact */}
-      <section>
-        <div className="relative overflow-hidden rounded-2xl p-5 md:p-8 bg-emerald-900 text-white">
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <p className="text-[10px] uppercase font-bold tracking-[0.2em] opacity-80 mb-1">OPERATIONAL OVERVIEW</p>
-              <h1 className="text-2xl md:text-4xl font-bold mb-1">Welcome Back, Partner</h1>
-              <p className="text-sm md:text-base opacity-80 max-w-md">
-                {userRole === 'owner'
-                  ? "Track inventory, investments, and profit real-time."
-                  : "Keep inventory updated and manage stock accurately."
-                }
-              </p>
+      {/* Hero Welcome */}
+      <FlipIn delay={0}>
+        <section>
+          <div className="relative overflow-hidden rounded-2xl p-5 md:p-8 bg-emerald-900 text-white">
+            <BorderBeam colorFrom="#6ee7b7" colorTo="#34d399" size={200} duration={8} borderWidth={1.5} />
+            <Meteors number={14} />
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <p className="text-[10px] uppercase font-bold tracking-[0.2em] opacity-80 mb-1">OPERATIONAL OVERVIEW</p>
+                <h1 className="text-2xl md:text-4xl font-bold mb-1">Welcome Back, Partner</h1>
+                <p className="text-sm md:text-base opacity-80 max-w-md">
+                  {userRole === 'owner'
+                    ? "Track inventory, investments, and profit real-time."
+                    : "Keep inventory updated and manage stock accurately."
+                  }
+                </p>
+              </div>
+              <ShimmerButton
+                onClick={() => navigate('/purchase')}
+                background="rgba(255,255,255,1)"
+                shimmerColor="rgba(6,78,59,0.3)"
+                borderRadius="12px"
+                className="text-emerald-900 px-6 py-3.5 font-bold w-full md:w-fit text-base"
+              >
+                <PlusCircle className="w-5 h-5" />
+                Quick Entry
+              </ShimmerButton>
             </div>
-            <button
-              onClick={() => navigate('/purchase')}
-              className="bg-white text-emerald-900 px-5 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95 transition-transform shadow-xl shadow-emerald-950/20 w-fit"
-            >
-              <PlusCircle className="w-5 h-5" />
-              Quick Entry
-            </button>
+            <div className="absolute right-[-20px] top-[-20px] opacity-10 pointer-events-none">
+              <Package className="w-[160px] h-[160px]" />
+            </div>
           </div>
-          <div className="absolute right-[-20px] top-[-20px] opacity-10 pointer-events-none">
-            <Package className="w-[160px] h-[160px]" />
-          </div>
-        </div>
-      </section>
+        </section>
+      </FlipIn>
 
-      {/* Stats Grid - 2x2 on mobile, 4 cols on desktop */}
+      {/* Stats Grid */}
       {userRole === 'owner' && (
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
-          <StatCard
-            icon={<TrendingUp className="w-4 h-4" />}
-            label="Aaj Ka Profit"
-            value={stats.todayActualProfit.toLocaleString()}
-            footer="Actually earned"
-            highlight
-          />
-          <StatCard
-            icon={<Receipt className="w-4 h-4" />}
-            label="Is Mahine Ka"
-            value={stats.monthActualProfit.toLocaleString()}
-            footer="Monthly profit"
-            color="text-emerald-700"
-          />
-          <StatCard
-            icon={<Wallet className="w-4 h-4" />}
-            label="Invested"
-            value={stats.totalInvested.toLocaleString()}
-            footer="Asset value"
-          />
-          <StatCard
-            icon={<BarChart3 className="w-4 h-4" />}
-            label="Lifetime Profit"
-            value={stats.lifetimeActualProfit.toLocaleString()}
-            footer="All-time earned"
-          />
+          {[{
+            icon: <TrendingUp className="w-4 h-4" />, label: 'Aaj Ka Profit',
+            value: stats.todayActualProfit, footer: 'Actually earned', highlight: true
+          },{
+            icon: <Receipt className="w-4 h-4" />, label: 'Is Mahine Ka',
+            value: stats.monthActualProfit, footer: 'Monthly profit', color: 'text-emerald-700'
+          },{
+            icon: <Wallet className="w-4 h-4" />, label: 'Invested',
+            value: stats.totalInvested, footer: 'Asset value'
+          },{
+            icon: <BarChart3 className="w-4 h-4" />, label: 'Lifetime Profit',
+            value: stats.lifetimeActualProfit, footer: 'All-time earned'
+          }].map((card, i) => (
+            <FlipIn key={card.label} delay={0.1 + i * 0.08}>
+              <StatCard {...card} />
+            </FlipIn>
+          ))}
         </section>
       )}
 
-      {/* Khata Outstanding Card — owner only */}
+      {/* Business Summary — Cafe + PUBG + Online Shop (owner only) */}
+      {userRole === 'owner' && (() => {
+        const combinedToday = stats.todayActualProfit + bizStats.pubgToday + bizStats.shopToday;
+        const combinedMonth = stats.monthActualProfit + bizStats.pubgMonth + bizStats.shopMonth;
+        const bizCards = [
+          { label: 'Cafe', icon: <Coffee className="w-4 h-4" />, today: stats.todayActualProfit, month: stats.monthActualProfit, to: '/reports', sub: null as string | null },
+          { label: 'PUBG', icon: <Gamepad2 className="w-4 h-4" />, today: bizStats.pubgToday, month: bizStats.pubgMonth, to: '/pubg', sub: bizItems.pubgCount > 0 ? `${bizItems.pubgCount} items · Rs ${Math.round(bizItems.pubgInvested).toLocaleString()} lagaya` : 'Abhi koi stock nahi — PUBG Hisab kholen' },
+          { label: 'Online Shop', icon: <ShoppingBag className="w-4 h-4" />, today: bizStats.shopToday, month: bizStats.shopMonth, to: '/shop', sub: bizItems.shopCount > 0 ? `${bizItems.shopCount} products · Rs ${Math.round(bizItems.shopInvested).toLocaleString()} lagaya` : 'Abhi koi product nahi — Online Shop kholen' },
+        ];
+        return (
+          <FlipIn delay={0.4}>
+            <section className="glass-card rounded-2xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-bold text-emerald-900">Business Summary</h2>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Munafa Aaj / Mahina</span>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {bizCards.map(b => (
+                  <button key={b.label} onClick={() => navigate(b.to)}
+                    className="p-4 bg-white/60 border border-emerald-50 rounded-2xl text-left hover:bg-emerald-50 transition-colors group">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                        {b.icon} {b.label}
+                      </p>
+                      <span className="text-slate-300 group-hover:text-emerald-600 text-xs">→</span>
+                    </div>
+                    <p className={cn('text-lg font-bold mt-0.5', b.today < 0 ? 'text-red-500' : 'text-emerald-900')}>
+                      Rs {Math.round(b.today).toLocaleString()}
+                    </p>
+                    <p className="text-[10px] text-slate-400 italic mt-1">
+                      Mahina: <span className={b.month < 0 ? 'text-red-500 font-bold' : 'font-bold'}>{b.month < 0 ? '−' : ''}Rs {Math.abs(Math.round(b.month)).toLocaleString()}</span>
+                    </p>
+                    {b.sub && <p className="text-[10px] text-emerald-700/80 font-bold mt-0.5 truncate">{b.sub}</p>}
+                  </button>
+                ))}
+                {/* Combined — teeno business ka total */}
+                <div className="p-4 bg-emerald-900 rounded-2xl text-white">
+                  <p className="text-[9px] font-bold uppercase tracking-widest opacity-70">🚀 Total (Teeno)</p>
+                  <p className={cn('text-lg font-bold mt-0.5', combinedToday < 0 ? 'text-red-300' : 'text-white')}>
+                    {combinedToday < 0 ? '−' : ''}Rs {Math.abs(Math.round(combinedToday)).toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-emerald-200/70 italic mt-1">
+                    Mahina: {combinedMonth < 0 ? '−' : ''}Rs {Math.abs(Math.round(combinedMonth)).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </section>
+          </FlipIn>
+        );
+      })()}
+
+      {/* Khata Outstanding Card */}
       {userRole === 'owner' && khataStats.totalOutstanding > 0 && (
-        <section>
-          <button
-            onClick={() => navigate('/khata')}
-            className="w-full flex items-center gap-4 p-5 bg-red-50 border border-red-200 rounded-2xl hover:bg-red-100 transition-colors text-left"
-          >
-            <div className="w-11 h-11 rounded-2xl bg-red-600 flex items-center justify-center shrink-0 shadow-lg shadow-red-200">
-              <BookOpen className="w-5 h-5 text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest">Khata — Udhar Baaki</p>
-              <p className="text-2xl font-bold text-red-700 tracking-tight">Rs {khataStats.totalOutstanding.toLocaleString()}</p>
-              <p className="text-xs text-red-400 font-medium">{khataStats.customersCount} customer{khataStats.customersCount !== 1 ? 's' : ''} pe milna hai</p>
-            </div>
-            <div className="text-red-300 text-xs font-bold uppercase tracking-wide shrink-0">Dekhein →</div>
-          </button>
-        </section>
+        <FlipIn delay={0.35}>
+          <section>
+            <button
+              onClick={() => navigate('/khata')}
+              className="w-full flex items-center gap-4 p-5 bg-red-50 border border-red-200 rounded-2xl hover:bg-red-100 transition-colors text-left"
+            >
+              <div className="w-11 h-11 rounded-2xl bg-red-600 flex items-center justify-center shrink-0 shadow-lg shadow-red-200">
+                <BookOpen className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest">Khata — Udhar Baaki</p>
+                <p className="text-2xl font-bold text-red-700 tracking-tight">
+                  Rs <NumberTicker value={khataStats.totalOutstanding} />
+                </p>
+                <p className="text-xs text-red-400 font-medium">{khataStats.customersCount} customer{khataStats.customersCount !== 1 ? 's' : ''} pe milna hai</p>
+              </div>
+              <div className="text-red-300 text-xs font-bold uppercase tracking-wide shrink-0">Dekhein →</div>
+            </button>
+          </section>
+        </FlipIn>
       )}
 
       {/* Expiry Alerts — owner only, only when items exist */}
@@ -349,6 +478,7 @@ export const Dashboard: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userR
 };
 
 const StatCard = ({ icon, label, value, trend, footer, highlight, color }: any) => (
+  <ShimmerSweep delay={0.35}>
   <div className={cn(
     "glass-card p-4 md:p-5 rounded-2xl flex flex-col justify-between group",
     highlight && "bg-gradient-to-br from-emerald-50 to-white border-emerald-100"
@@ -368,12 +498,15 @@ const StatCard = ({ icon, label, value, trend, footer, highlight, color }: any) 
         )}
       </div>
       <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{label}</p>
-      <h3 className={cn("text-xl md:text-2xl font-bold text-emerald-900 mt-0.5", color)}>{value}</h3>
+      <h3 className={cn("text-xl md:text-2xl font-bold text-emerald-900 mt-0.5", color)}>
+        Rs <NumberTicker value={typeof value === 'number' ? value : 0} />
+      </h3>
     </div>
     <div className="mt-2 pt-2 border-t border-emerald-50/50">
       <p className="text-[10px] text-slate-400 italic">{footer}</p>
     </div>
   </div>
+  </ShimmerSweep>
 );
 
 const ActionCard = ({ icon, title, desc, dark, onClick, highlight }: any) => (

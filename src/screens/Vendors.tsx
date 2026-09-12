@@ -3,8 +3,8 @@ import { Users, Phone, UserCircle, Search, ExternalLink, Calendar, Loader2, X, P
 import { motion, AnimatePresence } from 'motion/react';
 import { Vendor } from '../types';
 import { dataService } from '../services/dataService';
-
 import { useToast } from '../context/ToastContext';
+import { ShimmerButton } from '../components/magicui';
 
 export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRole = 'owner' }) => {
   const { showToast } = useToast();
@@ -23,20 +23,22 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
 
   React.useEffect(() => {
     const fetch = async () => {
-      const data = await dataService.getVendors();
-      setVendors(data || []);
-      setLoading(false);
+      try {
+        const data = await dataService.getVendors();
+        setVendors(data || []);
+      } catch {
+        setVendors([]);
+      } finally {
+        setLoading(false);
+      }
     };
     fetch();
   }, []);
 
   const handleDelete = async (id: string) => {
     if (userRole !== 'owner') return;
-    if (window.confirm('Are you sure you want to delete this vendor?')) {
-      // Implement delete vendor in dataService later if needed
-      // For now we just alert
-      showToast('Delete vendor feature coming soon.', 'info');
-    }
+    // TODO: implement vendor delete in dataService
+    showToast('Delete vendor feature coming soon.', 'info');
   };
 
   const filteredVendors = (vendors || []).filter(v => {
@@ -86,13 +88,15 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
             <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-emerald-900">Vendors</h1>
           </div>
           {userRole === 'owner' && (
-            <button 
+            <ShimmerButton
               onClick={() => setShowAddModal(true)}
-              className="bg-emerald-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-emerald-900/10 active:scale-95 transition-all"
+              background="rgba(2,44,34,1)"
+              borderRadius="12px"
+              className="text-white px-6 py-3 font-bold"
             >
               <Plus className="w-4 h-4" />
               Add New
-            </button>
+            </ShimmerButton>
           )}
         </div>
 
@@ -123,13 +127,13 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
               <div className="flex justify-between items-start mb-6">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-900 shadow-inner group-hover:scale-110 transition-transform">
-                    <span className="text-xl font-bold">{vendor.name[0]}</span>
+                    <span className="text-xl font-bold">{vendor.name?.[0]?.toUpperCase() || '?'}</span>
                   </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-emerald-950">{vendor.name}</h3>
+                  <div className="min-w-0">
+                    <h3 className="text-xl font-bold text-emerald-950 truncate">{vendor.name}</h3>
                     <div className="flex items-center gap-2 text-slate-400 mt-1">
-                      <Phone className="w-3 h-3 text-emerald-600" />
-                      <span className="text-xs font-bold uppercase tracking-widest tracking-tighter">{vendor.phoneNumber}</span>
+                      <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+                      <span className="text-xs font-bold uppercase tracking-tighter truncate">{vendor.phoneNumber}</span>
                     </div>
                   </div>
                 </div>
@@ -163,17 +167,23 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                   <Calendar className="w-4 h-4 text-emerald-900/30" />
                   <span>Last Supply: {vendor.lastPurchaseDate || 'Never'}</span>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-2">
                   {vendor.salesmanPhone && (
-                    <a href={`tel:${vendor.salesmanPhone}`} className="flex items-center gap-1.5 text-emerald-900 hover:underline">
+                    <a
+                      href={`tel:${vendor.salesmanPhone}`}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-900 text-xs font-bold hover:bg-emerald-100 transition-colors active:scale-95"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
                       Call Sales
-                      <Phone className="w-3 h-3" />
                     </a>
                   )}
                   {vendor.orderBookerPhone && (
-                    <a href={`tel:${vendor.orderBookerPhone}`} className="flex items-center gap-1.5 text-emerald-900 hover:underline">
+                    <a
+                      href={`tel:${vendor.orderBookerPhone}`}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-900 text-xs font-bold hover:bg-emerald-100 transition-colors active:scale-95"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
                       Call Booker
-                      <Phone className="w-3 h-3" />
                     </a>
                   )}
                 </div>
@@ -194,20 +204,20 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
       {/* Add Vendor Modal */}
       <AnimatePresence>
         {showAddModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-emerald-950/20 backdrop-blur-md"
               onClick={() => setShowAddModal(false)}
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: '100%' }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: '100%' }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="relative w-full max-w-lg glass-card rounded-[40px] p-8 shadow-2xl space-y-6"
+              className="relative w-full max-w-lg glass-card rounded-t-[40px] sm:rounded-[40px] p-6 sm:p-8 shadow-2xl space-y-6 max-h-[92vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-emerald-900">Add New Vendor</h2>
@@ -250,9 +260,10 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Salesman Phone <span className="normal-case text-slate-400 font-normal">(opt)</span></label>
-                    <input 
-                      type="text" 
-                      placeholder="Phone" 
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="Phone"
                       className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none focus:ring-2 focus:ring-emerald-900/20"
                       value={newVendor.salesmanPhone}
                       onChange={(e) => setNewVendor({...newVendor, salesmanPhone: e.target.value})}
@@ -272,9 +283,10 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Order Booker Phone <span className="normal-case text-slate-400 font-normal">(opt)</span></label>
-                    <input 
-                      type="text" 
-                      placeholder="Phone" 
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="Phone"
                       className="w-full bg-emerald-50/30 border-none rounded-2xl py-4 px-6 text-emerald-900 font-bold outline-none focus:ring-2 focus:ring-emerald-900/20"
                       value={newVendor.orderBookerPhone}
                       onChange={(e) => setNewVendor({...newVendor, orderBookerPhone: e.target.value})}
@@ -283,12 +295,14 @@ export const Vendors: React.FC<{ userRole?: 'owner' | 'employee' }> = ({ userRol
                 </div>
               </div>
 
-              <button 
+              <ShimmerButton
                 onClick={handleAddVendor}
-                className="w-full bg-emerald-900 text-white py-6 rounded-2xl font-bold text-xl active:scale-95 transition-all shadow-xl shadow-emerald-900/20"
+                background="rgba(2,44,34,1)"
+                borderRadius="16px"
+                className="w-full py-6 text-white font-bold text-xl"
               >
                 Save Vendor
-              </button>
+              </ShimmerButton>
             </motion.div>
           </div>
         )}

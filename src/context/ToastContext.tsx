@@ -35,7 +35,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-3 w-full max-w-sm px-6">
+      {/* bottom-36 on mobile clears the KhataDetail GIVE/GOT bar (at bottom-[76px]) + bottom nav */}
+      <div className="fixed bottom-36 md:bottom-8 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-3 w-full max-w-sm px-6">
         <AnimatePresence>
           {toasts.map((toast) => (
             <motion.div

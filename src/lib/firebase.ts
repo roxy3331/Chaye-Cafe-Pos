@@ -12,8 +12,6 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId
 };
 
-console.log("Firebase initialized for project:", firebaseConfig.projectId);
-
 const app = initializeApp(firebaseConfig);
 
 const firestoreDatabaseId = (firebaseConfigJson as any).firestoreDatabaseId;
@@ -82,11 +80,22 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 export { OperationType };
 
-getDocFromServer(doc(db, '_connection_test_', 'test')).catch(err => {
-  const msg = (err.message || '').toLowerCase();
-  if (msg.includes('permission-denied') || msg.includes('missing or insufficient permissions')) {
-    console.log("Firestore connection verified (Permission Denied is expected for test path).");
+// Connection heartbeat — deferred so it never blocks app startup / first paint.
+// (Previously ran eagerly at module load and forced a network round-trip on every boot.)
+if (typeof window !== 'undefined') {
+  const runHeartbeat = () => {
+    getDocFromServer(doc(db, '_connection_test_', 'test')).catch(err => {
+      const msg = (err.message || '').toLowerCase();
+      // permission-denied on the test path is expected and means the connection is fine
+      if (!msg.includes('permission-denied') && !msg.includes('missing or insufficient permissions')) {
+        console.warn("Firestore heartbeat failed:", err.message);
+      }
+    });
+  };
+  // Use idle callback when available, otherwise a short timeout, so it runs after the UI is interactive.
+  if ('requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(runHeartbeat, { timeout: 3000 });
   } else {
-    console.warn("Firestore heartbeat failed:", err.message);
+    setTimeout(runHeartbeat, 1500);
   }
-});
+}

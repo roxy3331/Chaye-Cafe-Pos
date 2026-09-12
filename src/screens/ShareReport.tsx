@@ -1,11 +1,37 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MoreVertical, TrendingUp, ListTodo, Wallet, Info, Send, CheckCheck } from 'lucide-react';
+import { ArrowLeft, MoreVertical, TrendingUp, ListTodo, Wallet, Info, Send, CheckCheck, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
+import { dataService } from '../services/dataService';
+import { filterByPeriod, computePnL } from '../lib/periodUtils';
 
 export const ShareReport: React.FC = () => {
   const navigate = useNavigate();
+  const [pnl, setPnl] = React.useState<{ revenue: number; totalExpenses: number; netProfit: number } | null>(null);
+
+  // REAL numbers (previously this screen showed hardcoded mock: 45,200 / 12,400 / 32,800).
+  React.useEffect(() => {
+    let unsub: (() => void) | undefined;
+    (async () => {
+      try {
+        const expenses = (await dataService.getExpenses()) || [];
+        unsub = dataService.subscribeToSales((sales) => {
+          const todaySales = filterByPeriod(sales, 'today');
+          const todayExpenses = filterByPeriod(expenses, 'today');
+          const result = computePnL(todaySales, todayExpenses);
+          setPnl({ revenue: result.revenue, totalExpenses: result.totalExpenses, netProfit: result.netProfit });
+        });
+      } catch {
+        setPnl({ revenue: 0, totalExpenses: 0, netProfit: 0 });
+      }
+    })();
+    return () => unsub?.();
+  }, []);
+
+  const today = new Date().toLocaleDateString('en-PK', { day: 'numeric', month: 'long', year: 'numeric' });
+  const fmt = (n: number) => Math.round(n).toLocaleString();
+
   return (
     <div className="max-w-md mx-auto space-y-8 pb-32 animate-in fade-in slide-in-from-bottom-6 min-h-screen">
       <header className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-emerald-50 z-[70] flex items-center justify-between px-6">
@@ -28,14 +54,16 @@ export const ShareReport: React.FC = () => {
             <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_2px_2px,black_1px,transparent_0)] bg-[size:20px_20px]" />
             <div className="relative z-10 max-w-[85%] bg-white p-4 rounded-2xl rounded-tl-none shadow-sm">
               <div className="space-y-2">
-                <p className="text-sm font-bold text-emerald-800">SHOP HISAB - Daily Inventory Summary</p>
-                <p className="text-[10px] text-slate-400 border-b border-emerald-50 pb-2">October 24, 2023</p>
+                <p className="text-sm font-bold text-emerald-800">CHAYE CAFE - Daily Hisab</p>
+                <p className="text-[10px] text-slate-400 border-b border-emerald-50 pb-2">{today}</p>
                 <div className="grid grid-cols-2 gap-y-2 text-xs font-medium pt-2">
-                  <span className="text-slate-400 font-normal">Shop Name</span><span className="text-right text-emerald-950">Urban Boutique</span>
-                  <span className="text-slate-400 font-normal">Sales</span><span className="text-right text-emerald-950">45,200</span>
-                  <span className="text-slate-400 font-normal">Expenses</span><span className="text-right text-emerald-950">12,400</span>
+                  <span className="text-slate-400 font-normal">Sales (Aaj)</span>
+                  <span className="text-right text-emerald-950">{pnl ? fmt(pnl.revenue) : <Loader2 className="w-3 h-3 animate-spin inline" />}</span>
+                  <span className="text-slate-400 font-normal">Expenses</span>
+                  <span className="text-right text-emerald-950">{pnl ? fmt(pnl.totalExpenses) : '...'}</span>
                   <div className="col-span-2 border-t border-dashed border-emerald-100 my-1" />
-                  <span className="text-emerald-900 font-bold">Net Profit</span><span className="text-right text-emerald-500 font-bold">32,800</span>
+                  <span className="text-emerald-900 font-bold">Net Profit</span>
+                  <span className="text-right text-emerald-500 font-bold">{pnl ? fmt(pnl.netProfit) : '...'}</span>
                 </div>
                 <div className="flex justify-end items-center gap-1 pt-1 opacity-40">
                   <span className="text-[8px]">10:42 AM</span>

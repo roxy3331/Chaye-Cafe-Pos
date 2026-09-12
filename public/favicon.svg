@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="32" fill="#064e3b"/>
+
+  <!-- Cup body -->
+  <rect x="16" y="28" width="26" height="18" rx="4" fill="#d1fae5"/>
+
+  <!-- Cup handle -->
+  <path d="M42 32 Q52 32 52 38 Q52 44 42 44" stroke="#6ee7b7" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+  <!-- Steam lines -->
+  <path d="M22 24 Q24 20 22 16" stroke="#6ee7b7" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M29 23 Q31 18 29 13" stroke="#6ee7b7" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M36 24 Q38 20 36 16" stroke="#6ee7b7" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Saucer -->
+  <ellipse cx="29" cy="46" rx="16" ry="3" fill="#6ee7b7"/>
+
+  <!-- Rs symbol on cup -->
+  <text x="24" y="41" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#064e3b">Rs</text>
+</svg>
